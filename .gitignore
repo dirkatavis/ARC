@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+.pytest_cache/
+
+# Virtual environments
+.venv/
+venv/
+
+# ARC runtime data
+project_arc/data/*.db
+
+# Editor/OS
+.vscode/
+.DS_Store
+Thumbs.db
