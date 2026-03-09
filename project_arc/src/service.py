@@ -15,6 +15,10 @@ class DuplicateEmployeeError(Exception):
     """Raised when an employee_id already exists."""
 
 
+class DatabaseAccessError(Exception):
+    """Raised when the backing SQLite database is unavailable."""
+
+
 class AttendanceService:
     """Coordinates ARC business rules between UI and database layers."""
 
@@ -27,18 +31,31 @@ class AttendanceService:
             self.db_manager.insert_employee(employee_id, first_name, last_name)
         except sqlite3.IntegrityError as exc:
             raise DuplicateEmployeeError(f"Employee ID {employee_id} already exists") from exc
+        except sqlite3.DatabaseError as exc:
+            raise DatabaseAccessError("Database is unavailable for employee updates.") from exc
 
     def lookup_employee(self, employee_id: int) -> dict[str, Any]:
         """Return employee data and call-out history or explicit NONE state."""
-        employee = self.db_manager.fetch_employee(employee_id)
+        try:
+            employee = self.db_manager.fetch_employee(employee_id)
+            history = self.db_manager.fetch_call_out_history(employee_id)
+        except sqlite3.DatabaseError as exc:
+            raise DatabaseAccessError("Database is unavailable for employee lookup.") from exc
+
         if employee is None:
             raise ValueError(f"Employee ID {employee_id} not found")
 
-        history = self.db_manager.fetch_call_out_history(employee_id)
         return {
             "employee": employee,
             "history": history if history else "NONE",
         }
+
+    def search_employees(self, query: str) -> list[dict[str, Any]]:
+        """Search employees by ID, first name, or last name."""
+        try:
+            return self.db_manager.search_employees(query)
+        except sqlite3.DatabaseError as exc:
+            raise DatabaseAccessError("Database is unavailable for employee search.") from exc
 
     def log_call_out(
         self,
@@ -51,13 +68,19 @@ class AttendanceService:
         if not recorded_by or not recorded_by.strip():
             raise ValueError("recorded_by is required")
 
-        return self.db_manager.insert_call_out(
-            employee_id=employee_id,
-            recorded_by=recorded_by.strip(),
-            notes=notes,
-            timestamp=timestamp,
-        )
+        try:
+            return self.db_manager.insert_call_out(
+                employee_id=employee_id,
+                recorded_by=recorded_by.strip(),
+                notes=notes,
+                timestamp=timestamp,
+            )
+        except sqlite3.DatabaseError as exc:
+            raise DatabaseAccessError("Database is unavailable for call-out logging.") from exc
 
     def get_top_10_high_frequency(self) -> list[dict[str, Any]]:
         """Return top 10 high-frequency call-out report rows."""
-        return self.db_manager.fetch_top_10_high_frequency()
+        try:
+            return self.db_manager.fetch_top_10_high_frequency()
+        except sqlite3.DatabaseError as exc:
+            raise DatabaseAccessError("Database is unavailable for reporting.") from exc

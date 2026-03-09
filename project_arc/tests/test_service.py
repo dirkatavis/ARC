@@ -11,7 +11,7 @@ from typing import Any
 import pytest
 
 from src.database import DatabaseManager
-from src.service import AttendanceService, DuplicateEmployeeError
+from src.service import AttendanceService, DatabaseAccessError, DuplicateEmployeeError
 
 SCHEMA_SQL = """
 CREATE TABLE employees (
@@ -104,6 +104,44 @@ def test_lookup_returns_none_state_for_new_employee(arc_context: dict[str, Any])
     assert result["history"] == "NONE"
 
 
+def test_search_employees_by_id(arc_context: dict[str, Any]) -> None:
+    connection = arc_context["connection"]
+    service: AttendanceService = arc_context["service"]
+
+    seed_employee(connection, 1101, "Mina", "Park")
+
+    matches = service.search_employees("1101")
+
+    assert len(matches) == 1
+    assert matches[0]["employee_id"] == 1101
+
+
+def test_search_employees_by_first_name(arc_context: dict[str, Any]) -> None:
+    connection = arc_context["connection"]
+    service: AttendanceService = arc_context["service"]
+
+    seed_employee(connection, 1201, "Jordan", "Miles")
+    seed_employee(connection, 1202, "Jori", "Stone")
+
+    matches = service.search_employees("jOr")
+    matched_ids = {row["employee_id"] for row in matches}
+
+    assert matched_ids == {1201, 1202}
+
+
+def test_search_employees_by_last_name(arc_context: dict[str, Any]) -> None:
+    connection = arc_context["connection"]
+    service: AttendanceService = arc_context["service"]
+
+    seed_employee(connection, 1301, "Sam", "Howard")
+    seed_employee(connection, 1302, "Ari", "Cole")
+
+    matches = service.search_employees("how")
+
+    assert len(matches) == 1
+    assert matches[0]["employee_id"] == 1301
+
+
 def test_duplicate_employee_id_is_prevented(arc_context: dict[str, Any]) -> None:
     service: AttendanceService = arc_context["service"]
 
@@ -191,3 +229,16 @@ def test_log_call_out_honors_explicit_timestamp(arc_context: dict[str, Any]) -> 
 
     assert row is not None
     assert row["timestamp"] == expected_timestamp
+
+
+def test_log_call_out_raises_database_access_error_on_sqlite_failure(arc_context: dict[str, Any]) -> None:
+    service: AttendanceService = arc_context["service"]
+
+    class FailingDb:
+        def insert_call_out(self, **_kwargs: Any) -> int:
+            raise sqlite3.OperationalError("database is locked")
+
+    service.db_manager = FailingDb()  # type: ignore[assignment]
+
+    with pytest.raises(DatabaseAccessError, match="unavailable"):
+        service.log_call_out(1001, recorded_by="ManagerZ", notes="test")

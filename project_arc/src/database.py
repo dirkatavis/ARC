@@ -56,6 +56,36 @@ class DatabaseManager:
             return None
         return dict(row)
 
+    def search_employees(self, query: str) -> list[dict[str, Any]]:
+        """Return employees matching ID, first name, or last name."""
+        q = query.strip()
+        if not q:
+            return []
+
+        if q.isdigit():
+            rows = self.connection.execute(
+                """
+                SELECT employee_id, first_name, last_name
+                FROM employees
+                WHERE employee_id = ?
+                ORDER BY employee_id ASC
+                """,
+                (int(q),),
+            ).fetchall()
+            return [dict(row) for row in rows]
+
+        like_pattern = f"%{q.lower()}%"
+        rows = self.connection.execute(
+            """
+            SELECT employee_id, first_name, last_name
+            FROM employees
+            WHERE lower(first_name) LIKE ? OR lower(last_name) LIKE ?
+            ORDER BY last_name ASC, first_name ASC, employee_id ASC
+            """,
+            (like_pattern, like_pattern),
+        ).fetchall()
+        return [dict(row) for row in rows]
+
     def insert_call_out(
         self,
         employee_id: int,

@@ -12,6 +12,7 @@ venv/
 
 # ARC runtime data
 project_arc/data/*.db
+project_arc/error_log.txt
 
 # Editor/OS
 .vscode/
