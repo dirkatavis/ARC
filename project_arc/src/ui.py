@@ -32,6 +32,7 @@ class ArcApp(ctk.CTk):
         self.callout_var = tk.BooleanVar(value=False)
         self.current_view = tk.StringVar(value="Case Entry")
         self.match_map: dict[str, int] = {}
+        self._suppress_match_selection = False
 
         ctk.set_appearance_mode("system")
         ctk.set_default_color_theme("blue")
@@ -253,6 +254,8 @@ class ArcApp(ctk.CTk):
             return
 
         if not matches:
+            self.match_map = {}
+            self.match_selector.grid_remove()
             self._set_status("No employee matches found", is_error=True)
             if query.isdigit():
                 should_add = messagebox.askyesno(
@@ -264,6 +267,7 @@ class ArcApp(ctk.CTk):
             return
 
         if len(matches) == 1:
+            self.match_map = {}
             self.match_selector.grid_remove()
             self._load_employee(int(matches[0]["employee_id"]))
             return
@@ -274,12 +278,21 @@ class ArcApp(ctk.CTk):
         }
         options = list(self.match_map.keys())
         self.match_selector.configure(values=options)
+        self._suppress_match_selection = True
         self.match_selector.set(options[0])
+        self._suppress_match_selection = False
         self.match_selector.grid()
-        self._load_employee(self.match_map[options[0]])
-        self._set_status("Multiple matches found. Select employee.")
+        self.current_employee_id = None
+        self.current_employee_name = ""
+        self.employee_label.configure(text="None")
+        self._update_history_text("NONE")
+        self._update_save_button_state()
+        self._set_status("Multiple matches found. Select employee.", is_error=True)
 
     def _handle_match_selection(self, selected: str) -> None:
+        if self._suppress_match_selection:
+            return
+
         employee_id = self.match_map.get(selected)
         if employee_id is not None:
             self._load_employee(employee_id)

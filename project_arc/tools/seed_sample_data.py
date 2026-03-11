@@ -31,6 +31,9 @@ EMPLOYEES = [
     (1100, "Ari", "Johnson"),
     (1101, "Ari", "Smith"),
     (1102, "Taylor", "Green"),
+    (1103, "Jamie", "Smith"),
+    (1104, "Noah", "Smith"),
+    (1105, "Maya", "Rivera"),
 ]
 
 CALL_OUT_PLAN = {
