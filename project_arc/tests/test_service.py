@@ -3,6 +3,8 @@
 All tests use in-memory SQLite fixtures to guarantee isolated execution.
 """
 
+# pylint: disable=redefined-outer-name
+
 from __future__ import annotations
 
 import sqlite3

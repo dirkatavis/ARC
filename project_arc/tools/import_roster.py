@@ -5,9 +5,15 @@ from __future__ import annotations
 import argparse
 import sqlite3
 from pathlib import Path
+import sys
 
-from src.admin_import import import_employee_roster
-from src.database import DatabaseManager
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = PROJECT_ROOT.parent
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from project_arc.src.admin_import import import_employee_roster
+from project_arc.src.database import DatabaseManager
 
 
 def main() -> int:

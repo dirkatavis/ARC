@@ -4,6 +4,8 @@ Run manually on Windows with:
 RUN_UI_E2E=1 pytest -q tests/test_ui_smoke.py
 """
 
+# pylint: disable=import-error,unused-variable
+
 from __future__ import annotations
 
 import os
@@ -21,8 +23,8 @@ def test_verification_modal_smoke_flow(tmp_path: Path) -> None:
     if os.getenv("RUN_UI_E2E") != "1":
         pytest.skip("Set RUN_UI_E2E=1 to run desktop automation tests")
 
-    pywinauto = pytest.importorskip("pywinauto")
-    from pywinauto.application import Application
+    application_module = pytest.importorskip("pywinauto.application")
+    Application = application_module.Application
 
     db_path = tmp_path / "arc_ui_smoke.db"
     connection = sqlite3.connect(db_path)
