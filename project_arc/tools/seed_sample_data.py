@@ -27,6 +27,13 @@ EMPLOYEES = [
     (1010, "Jamie", "Fox"),
     (1011, "Casey", "Lane"),
     (1012, "Drew", "King"),
+    (1099, "Morgan", "Test"),
+    (1100, "Ari", "Johnson"),
+    (1101, "Ari", "Smith"),
+    (1102, "Taylor", "Green"),
+    (1103, "Jamie", "Smith"),
+    (1104, "Noah", "Smith"),
+    (1105, "Maya", "Rivera"),
 ]
 
 CALL_OUT_PLAN = {
@@ -42,6 +49,24 @@ CALL_OUT_PLAN = {
     1010: ["Car trouble", "Car trouble"],
     1011: ["Weather delay", "Weather delay", "Weather delay", "Weather delay"],
     1012: ["Family care"],
+    1099: [
+        "Sick leave", "Sick leave", "Sick leave", "Sick leave", "Sick leave",
+        "Medical appointment", "Medical appointment", "Medical appointment",
+        "Childcare issue", "Childcare issue", "Childcare issue", "Childcare issue",
+        "Car trouble", "Car trouble", "Car trouble", "Car trouble", "Car trouble",
+        "Family emergency", "Family emergency", "Family emergency",
+        "Weather delay", "Weather delay", "Weather delay", "Weather delay", "Weather delay",
+        "Personal day", "Personal day", "Personal day",
+        "Appointment", "Appointment", "Appointment",
+        "Transit delay", "Transit delay", "Transit delay",
+        "School closure", "School closure",
+        "Unexpected shift conflict", "Unexpected shift conflict",
+        "Migraine", "Migraine", "Migraine",
+        "Doctor follow-up", "Doctor follow-up",
+        "Dental appointment", "Dental appointment",
+        "Flu symptoms", "Flu symptoms",
+        "Post-op follow-up",
+    ],
 }
 
 

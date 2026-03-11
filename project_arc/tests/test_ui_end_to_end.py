@@ -370,6 +370,89 @@ def test_search_by_first_or_last_name_loads_employee(ui_gate, app_with_db) -> No
     assert "Nia Bishop" in app.employee_label.cget("text")
 
 
+def test_multiple_matches_shows_selector_without_auto_loading(ui_gate, app_with_db) -> None:
+    app, _connection, service = app_with_db
+
+    service.add_employee(2001, "Alex", "Green")
+    service.add_employee(2002, "Alex", "Brown")
+    service.log_call_out(
+        2001,
+        recorded_by="MgrAlpha",
+        notes="Alex Green distinct note",
+        timestamp="2026-04-01 09:00:00",
+    )
+    service.log_call_out(
+        2002,
+        recorded_by="MgrBravo",
+        notes="Alex Brown distinct note",
+        timestamp="2026-04-02 09:00:00",
+    )
+
+    app.search_entry.delete(0, "end")
+    app.search_entry.insert(0, "Alex")
+    app._handle_lookup()
+
+    assert app.employee_label.cget("text") == "None"
+    assert app.match_selector.winfo_manager() == "grid"
+    assert app.status_label.cget("text") == "Status: Multiple matches found. Select employee."
+
+    alex_green_option = next(key for key in app.match_map if key.startswith("2001 - "))
+    app._handle_match_selection(alex_green_option)
+
+    assert "Alex Green" in app.employee_label.cget("text")
+    history_text = app.history_box.get("1.0", "end")
+    assert "MgrAlpha" in history_text
+    assert "Alex Green distinct note" in history_text
+
+    alex_brown_option = next(key for key in app.match_map if key.startswith("2002 - "))
+    app._handle_match_selection(alex_brown_option)
+
+    assert "Alex Brown" in app.employee_label.cget("text")
+    history_text = app.history_box.get("1.0", "end")
+    assert "MgrBravo" in history_text
+    assert "Alex Brown distinct note" in history_text
+
+
+def test_multiple_last_name_matches_show_selector_without_auto_loading(ui_gate, app_with_db) -> None:
+    app, _connection, service = app_with_db
+
+    service.add_employee(2011, "Jamie", "Smith")
+    service.add_employee(2012, "Noah", "Smith")
+    service.log_call_out(
+        2011,
+        recorded_by="MgrSmithA",
+        notes="Jamie Smith distinct note",
+        timestamp="2026-04-03 09:00:00",
+    )
+    service.log_call_out(
+        2012,
+        recorded_by="MgrSmithB",
+        notes="Noah Smith distinct note",
+        timestamp="2026-04-04 09:00:00",
+    )
+
+    app.search_entry.delete(0, "end")
+    app.search_entry.insert(0, "Smith")
+    app._handle_lookup()
+
+    assert app.employee_label.cget("text") == "None"
+    assert app.match_selector.winfo_manager() == "grid"
+
+    jamie_smith_option = next(key for key in app.match_map if key.startswith("2011 - "))
+    app._handle_match_selection(jamie_smith_option)
+    assert "Jamie Smith" in app.employee_label.cget("text")
+    history_text = app.history_box.get("1.0", "end")
+    assert "MgrSmithA" in history_text
+    assert "Jamie Smith distinct note" in history_text
+
+    noah_smith_option = next(key for key in app.match_map if key.startswith("2012 - "))
+    app._handle_match_selection(noah_smith_option)
+    assert "Noah Smith" in app.employee_label.cget("text")
+    history_text = app.history_box.get("1.0", "end")
+    assert "MgrSmithB" in history_text
+    assert "Noah Smith distinct note" in history_text
+
+
 def test_top10_resides_on_reporting_view(ui_gate, app_with_db) -> None:
     app, _connection, _service = app_with_db
 
