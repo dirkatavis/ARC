@@ -19,9 +19,8 @@ class UiController:
     def can_enable_save(
         current_employee_id: int | None,
         recorded_by: str,
-        callout_checked: bool,
     ) -> bool:
-        return current_employee_id is not None and bool(recorded_by.strip()) and callout_checked
+        return current_employee_id is not None and bool(recorded_by.strip())
 
     @staticmethod
     def format_history(history: str | list[dict[str, object]]) -> str:

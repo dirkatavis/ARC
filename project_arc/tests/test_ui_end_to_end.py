@@ -101,10 +101,9 @@ def test_empty_state_visuals_none_and_add_employee_button(ui_gate, app_with_db, 
     pytest.xfail("Dedicated Add Employee button is not implemented in current UI")
 
 
-def test_add_new_employee_does_not_require_callout_checkbox(ui_gate, app_with_db, monkeypatch) -> None:
+def test_add_new_employee_does_not_log_call_out(ui_gate, app_with_db, monkeypatch) -> None:
     app, connection, _service = app_with_db
 
-    app.callout_var.set(False)
     monkeypatch.setattr(messagebox, "askyesno", lambda *_args, **_kwargs: True)
 
     app.search_entry.delete(0, "end")
@@ -137,7 +136,6 @@ def test_add_new_employee_does_not_require_callout_checkbox(ui_gate, app_with_db
     assert row[1] == "Robin"
     assert row[2] == "Vale"
     assert call_out_count == 0
-    assert app.callout_var.get() is False
 
 
 def test_verification_modal_trigger_blocks_write_until_confirm(ui_gate, app_with_db) -> None:
@@ -149,7 +147,6 @@ def test_verification_modal_trigger_blocks_write_until_confirm(ui_gate, app_with
 
     app.recorded_by_entry.insert(0, "ManagerA")
     app.notes_box.insert("1.0", "Flu")
-    app.callout_var.set(True)
     app._update_save_button_state()
 
     before = connection.execute("SELECT COUNT(*) FROM call_outs").fetchone()[0]
@@ -173,11 +170,6 @@ def test_cross_field_validation_save_button_state(ui_gate, app_with_db) -> None:
     assert "Enter Recorded By" in app.save_hint_label.cget("text")
 
     app.recorded_by_entry.insert(0, "ManagerB")
-    app._update_save_button_state()
-    assert app.save_button.cget("state") == "normal"
-    assert "Check Log Call-Out" in app.save_hint_label.cget("text")
-
-    app.callout_var.set(True)
     app._update_save_button_state()
     assert app.save_button.cget("state") == "normal"
     assert "Ready:" in app.save_hint_label.cget("text")
@@ -205,7 +197,6 @@ def test_modal_cancellation_recovery_preserves_input(ui_gate, app_with_db) -> No
 
     app.recorded_by_entry.insert(0, "ManagerC")
     app.notes_box.insert("1.0", "Need one day")
-    app.callout_var.set(True)
     app._update_save_button_state()
 
     before = connection.execute("SELECT COUNT(*) FROM call_outs").fetchone()[0]
@@ -232,7 +223,6 @@ def test_report_refresh_after_commit_and_status_feedback(ui_gate, app_with_db) -
 
     app.recorded_by_entry.insert(0, "ManagerD")
     app.notes_box.insert("1.0", "Traffic")
-    app.callout_var.set(True)
     app._update_save_button_state()
 
     app._open_verification_modal()
@@ -250,7 +240,6 @@ def test_report_refresh_after_commit_and_status_feedback(ui_gate, app_with_db) -
     assert "Ari Cole" in app.employee_label.cget("text")
     assert app.recorded_by_entry.get().strip() == ""
     assert app.notes_box.get("1.0", "end").strip() == ""
-    assert app.callout_var.get() is False
     assert app.save_button.cget("state") == "normal"
     assert "Enter Recorded By" in app.save_hint_label.cget("text")
 
@@ -275,7 +264,6 @@ def test_input_character_stress_notes_layout_stability(ui_gate, app_with_db) -> 
     long_notes = "A" * 8000
     app.notes_box.insert("1.0", long_notes)
     app.recorded_by_entry.insert(0, "ManagerE")
-    app.callout_var.set(True)
     app._update_save_button_state()
     app.update_idletasks()
 
@@ -292,7 +280,6 @@ def test_navigation_persistence_between_tabs(ui_gate, app_with_db) -> None:
     app._handle_lookup()
     app.recorded_by_entry.insert(0, "ManagerPersist")
     app.notes_box.insert("1.0", "Keep this input")
-    app.callout_var.set(True)
     app._update_save_button_state()
 
     app._handle_view_change("Reporting")
@@ -301,7 +288,6 @@ def test_navigation_persistence_between_tabs(ui_gate, app_with_db) -> None:
     assert "Ari Cole" in app.employee_label.cget("text")
     assert app.recorded_by_entry.get().strip() == "ManagerPersist"
     assert app.notes_box.get("1.0", "end").strip() == "Keep this input"
-    assert app.callout_var.get() is True
     assert app.save_button.cget("state") == "normal"
 
 
@@ -317,7 +303,6 @@ def test_database_lock_error_feedback(ui_gate, app_with_db, monkeypatch) -> None
 
     app.recorded_by_entry.insert(0, "ManagerLock")
     app.notes_box.insert("1.0", "Lock simulation")
-    app.callout_var.set(True)
     app._update_save_button_state()
 
     def locked_log_call_out(*_args, **_kwargs):
@@ -370,6 +355,25 @@ def test_search_by_first_or_last_name_loads_employee(ui_gate, app_with_db) -> No
     assert "Nia Bishop" in app.employee_label.cget("text")
 
 
+def test_partial_single_match_requires_explicit_selection(ui_gate, app_with_db) -> None:
+    app, _connection, service = app_with_db
+
+    service.add_employee(2201, "Mila", "Johnson")
+
+    app.search_entry.delete(0, "end")
+    app.search_entry.insert(0, "John")
+    app._handle_lookup()
+
+    assert app.employee_label.cget("text") == "None"
+    assert app.match_cards_frame.winfo_manager() == "grid"
+    assert app.status_label.cget("text") == "Status: Partial match found. Select employee to confirm."
+
+    johnson_option = next(key for key in app.match_map if key.startswith("2201 - "))
+    app._handle_match_selection(johnson_option)
+
+    assert "Mila Johnson" in app.employee_label.cget("text")
+
+
 def test_multiple_matches_shows_selector_without_auto_loading(ui_gate, app_with_db) -> None:
     app, _connection, service = app_with_db
 
@@ -393,7 +397,7 @@ def test_multiple_matches_shows_selector_without_auto_loading(ui_gate, app_with_
     app._handle_lookup()
 
     assert app.employee_label.cget("text") == "None"
-    assert app.match_selector.winfo_manager() == "grid"
+    assert app.match_cards_frame.winfo_manager() == "grid"
     assert app.status_label.cget("text") == "Status: Multiple matches found. Select employee."
 
     alex_green_option = next(key for key in app.match_map if key.startswith("2001 - "))
@@ -436,7 +440,7 @@ def test_multiple_last_name_matches_show_selector_without_auto_loading(ui_gate, 
     app._handle_lookup()
 
     assert app.employee_label.cget("text") == "None"
-    assert app.match_selector.winfo_manager() == "grid"
+    assert app.match_cards_frame.winfo_manager() == "grid"
 
     jamie_smith_option = next(key for key in app.match_map if key.startswith("2011 - "))
     app._handle_match_selection(jamie_smith_option)
@@ -466,4 +470,111 @@ def test_top10_resides_on_reporting_view(ui_gate, app_with_db) -> None:
     assert app.current_view.get() == "Reporting"
     assert app.case_entry_frame.winfo_manager() == ""
     assert app.reporting_frame.winfo_manager() == "grid"
+
+
+def test_action_pane_zero_state_guidance_updates_with_selection(ui_gate, app_with_db) -> None:
+    app, _connection, _service = app_with_db
+
+    assert "Please search and select an employee" in app.action_zero_state_label.cget("text")
+
+    app.search_entry.delete(0, "end")
+    app.search_entry.insert(0, "1001")
+    app._handle_lookup()
+
+    assert "Ready to record for:" in app.action_zero_state_label.cget("text")
+
+
+# ── Section 3: Session identity fixtures and tests ─────────────────────────
+
+@pytest.fixture
+def app_with_session(monkeypatch, tmp_path: Path):
+    """App fixture with a pre-set session manager so sign-in modal is skipped."""
+    db_path = tmp_path / "arc_session_e2e.db"
+    connection = sqlite3.connect(db_path)
+    connection.row_factory = sqlite3.Row
+
+    db = DatabaseManager(connection)
+    db.initialize_schema()
+
+    service = AttendanceService(db)
+    service.add_employee(1001, "Ari", "Cole")
+
+    monkeypatch.setattr(messagebox, "showerror", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(messagebox, "askyesno", lambda *_args, **_kwargs: False)
+
+    app = ArcApp(service, session_manager="TestManager")
+    app.withdraw()
+    app.update_idletasks()
+
+    yield app, connection, service
+
+    app.destroy()
+    connection.close()
+
+
+def test_session_manager_autofills_recorded_by(ui_gate, app_with_session) -> None:
+    app, _connection, _service = app_with_session
+
+    assert app.recorded_by_entry.get() == "TestManager"
+
+
+def test_recorded_by_is_readonly_with_session(ui_gate, app_with_session) -> None:
+    app, _connection, _service = app_with_session
+
+    assert app.recorded_by_entry.cget("state") == "disabled"
+
+
+def test_change_session_button_visible_with_session(ui_gate, app_with_session) -> None:
+    app, _connection, _service = app_with_session
+
+    assert app.change_session_button.winfo_manager() == "grid"
+
+
+def test_toggle_session_edit_unlocks_and_relocks(ui_gate, app_with_session) -> None:
+    app, _connection, _service = app_with_session
+
+    # Clicking Change enters edit mode
+    app._toggle_session_edit()
+    assert app.recorded_by_entry.cget("state") == "normal"
+    assert app.change_session_button.cget("text") == "Confirm"
+
+    # Update name then confirm re-locks
+    app.recorded_by_entry.delete(0, "end")
+    app.recorded_by_entry.insert(0, "NewManager")
+    app._toggle_session_edit()
+    assert app.recorded_by_entry.cget("state") == "disabled"
+    assert app.recorded_by_entry.get() == "NewManager"
+    assert app.session_manager == "NewManager"
+    assert app.change_session_button.cget("text") == "(Change)"
+
+
+def test_session_recorded_by_refills_after_save(ui_gate, app_with_session) -> None:
+    app, connection, _service = app_with_session
+
+    app.search_entry.delete(0, "end")
+    app.search_entry.insert(0, "1001")
+    app._handle_lookup()
+
+    app._open_verification_modal()
+    modal = next(m for m in _find_toplevels(app) if m.title() == "Verify Call-Out")
+    confirm_button = _find_button_by_text(modal, "Confirm")
+    assert confirm_button is not None
+    confirm_button.invoke()
+    app.update_idletasks()
+
+    # Session manager is re-applied after save
+    assert app.recorded_by_entry.get() == "TestManager"
+    assert app.recorded_by_entry.cget("state") == "disabled"
+    assert app.status_label.cget("text") == "Status: Call-out saved"
+
+
+def test_save_enabled_without_checkbox_when_employee_and_recorded_by_set(ui_gate, app_with_session) -> None:
+    app, _connection, _service = app_with_session
+
+    app.search_entry.delete(0, "end")
+    app.search_entry.insert(0, "1001")
+    app._handle_lookup()
+
+    # Session auto-fills Recorded By — save should be ready with no checkbox
+    assert "Ready:" in app.save_hint_label.cget("text")
 

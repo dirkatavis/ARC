@@ -20,16 +20,33 @@ from src.service import AttendanceService, DatabaseAccessError, DuplicateEmploye
 from src.ui_controller import UiController
 
 
+VIEW_SELECTOR_WIDTH = 180
+SEARCH_ROW_WIDTH = 560
+SEARCH_ENTRY_WIDTH = 260
+SEARCH_BUTTON_WIDTH = 120
+CONTEXT_PANE_WIDTH = 620
+ACTION_PANE_WIDTH = 360
+DETAILS_PANEL_WIDTH = 420
+MATCH_SELECTOR_WIDTH = 420
+MATCH_CARDS_WIDTH = 420
+HISTORY_BOX_WIDTH = 420
+HISTORY_BOX_HEIGHT = 130
+RECORDED_BY_WIDTH = 300
+NOTES_BOX_WIDTH = 320
+NOTES_BOX_HEIGHT = 90
+STATUS_BAR_WIDTH = 420
+
+
 class ArcApp(ctk.CTk):
     """Main ARC application window."""
 
-    def __init__(self, service: AttendanceService) -> None:
+    def __init__(self, service: AttendanceService, session_manager: str | None = None) -> None:
         super().__init__()
         self.service = service
         self.error_log_path = Path(__file__).resolve().parents[1] / "error_log.txt"
         self.current_employee_id: int | None = None
         self.current_employee_name: str = ""
-        self.callout_var = tk.BooleanVar(value=False)
+        self.session_manager: str | None = session_manager
         self.current_view = tk.StringVar(value="Case Entry")
         self.match_map: dict[str, int] = {}
         self._suppress_match_selection = False
@@ -51,6 +68,11 @@ class ArcApp(ctk.CTk):
         self._handle_view_change("Case Entry")
         self._set_status("Ready")
 
+        if session_manager is not None:
+            self._apply_session_manager()
+        else:
+            self.after(50, self._show_sign_in_modal)
+
     def _build_navigation(self) -> None:
         nav = ctk.CTkFrame(self)
         nav.grid(row=0, column=0, sticky="ew", padx=16, pady=(16, 8))
@@ -62,6 +84,7 @@ class ArcApp(ctk.CTk):
             values=["Case Entry", "Reporting"],
             variable=self.current_view,
             command=self._handle_view_change,
+            width=VIEW_SELECTOR_WIDTH,
         )
         self.view_selector.grid(row=0, column=1, sticky="w", padx=8, pady=10)
 
@@ -69,68 +92,120 @@ class ArcApp(ctk.CTk):
         self.case_entry_frame = ctk.CTkFrame(self)
         self.case_entry_frame.grid(row=1, column=0, sticky="nsew", padx=16, pady=(0, 8))
         self.case_entry_frame.grid_columnconfigure(0, weight=1)
+        self.case_entry_frame.grid_columnconfigure(1, weight=0)
+        self.case_entry_frame.grid_rowconfigure(0, weight=1)
 
-        search_row = ctk.CTkFrame(self.case_entry_frame)
-        search_row.grid(row=0, column=0, sticky="ew", padx=16, pady=(16, 8))
-        search_row.grid_columnconfigure(1, weight=1)
+        self.context_pane = ctk.CTkFrame(self.case_entry_frame, width=CONTEXT_PANE_WIDTH)
+        self.context_pane.grid(row=0, column=0, sticky="nsew", padx=(16, 8), pady=(16, 12))
+        self.context_pane.grid_columnconfigure(0, weight=1)
+
+        self.action_pane = ctk.CTkFrame(self.case_entry_frame, width=ACTION_PANE_WIDTH)
+        self.action_pane.grid(row=0, column=1, sticky="nsw", padx=(8, 16), pady=(16, 12))
+        self.action_pane.grid_columnconfigure(0, weight=1)
+
+        search_row = ctk.CTkFrame(self.context_pane, width=SEARCH_ROW_WIDTH)
+        search_row.grid(row=0, column=0, sticky="w", padx=16, pady=(16, 8))
 
         ctk.CTkLabel(search_row, text="* Search (ID / First / Last)").grid(
             row=0, column=0, padx=(12, 8), pady=12
         )
-        self.search_entry = ctk.CTkEntry(search_row, placeholder_text="e.g. 1001, Ari, Bishop")
-        self.search_entry.grid(row=0, column=1, sticky="ew", padx=8, pady=12)
+        self.search_entry = ctk.CTkEntry(
+            search_row,
+            placeholder_text="e.g. 1001, Ari, Bishop",
+            width=SEARCH_ENTRY_WIDTH,
+        )
+        self.search_entry.grid(row=0, column=1, sticky="w", padx=8, pady=12)
         self.search_entry.bind("<Return>", lambda _event: self._handle_lookup())
         self.employee_id_entry = self.search_entry
 
-        self.search_button = ctk.CTkButton(search_row, text="Search", command=self._handle_lookup)
+        self.search_button = ctk.CTkButton(
+            search_row,
+            text="Search",
+            command=self._handle_lookup,
+            width=SEARCH_BUTTON_WIDTH,
+        )
         self.search_button.grid(row=0, column=2, padx=(8, 12), pady=12)
 
         self.match_selector = ctk.CTkOptionMenu(
-            self.case_entry_frame,
+            self.context_pane,
             values=["No matches"],
             command=self._handle_match_selection,
+            width=MATCH_SELECTOR_WIDTH,
         )
-        self.match_selector.grid(row=1, column=0, sticky="ew", padx=16)
         self.match_selector.grid_remove()
 
-        details = ctk.CTkFrame(self.case_entry_frame)
-        details.grid(row=2, column=0, sticky="ew", padx=16, pady=8)
-        details.grid_columnconfigure(1, weight=1)
-        ctk.CTkLabel(details, text="Selected Employee:").grid(row=0, column=0, padx=12, pady=8, sticky="w")
-        self.employee_label = ctk.CTkLabel(details, text="None")
-        self.employee_label.grid(row=0, column=1, padx=12, pady=8, sticky="w")
+        self.match_cards_frame = ctk.CTkFrame(self.context_pane, width=MATCH_CARDS_WIDTH)
+        self.match_cards_frame.grid(row=2, column=0, sticky="w", padx=16, pady=(8, 4))
+        self.match_cards_frame.grid_remove()
 
-        ctk.CTkLabel(self.case_entry_frame, text="Past Call-Outs").grid(
-            row=3, column=0, sticky="w", padx=16, pady=(12, 4)
+        details = ctk.CTkFrame(self.context_pane, width=DETAILS_PANEL_WIDTH)
+        details.grid(row=3, column=0, sticky="w", padx=16, pady=8)
+        details.grid_columnconfigure(0, weight=1)
+        ctk.CTkLabel(details, text="Selected Employee", font=ctk.CTkFont(weight="bold")).grid(
+            row=0, column=0, padx=12, pady=(8, 2), sticky="w"
         )
-        self.history_box = ctk.CTkTextbox(self.case_entry_frame, height=230)
-        self.history_box.grid(row=4, column=0, sticky="nsew", padx=16, pady=(0, 10))
+        self.employee_label = ctk.CTkLabel(details, text="None", anchor="w")
+        self.employee_label.grid(row=1, column=0, padx=12, pady=(0, 8), sticky="w")
+
+        ctk.CTkLabel(self.context_pane, text="Past Call-Outs").grid(
+            row=4, column=0, sticky="w", padx=16, pady=(12, 4)
+        )
+        self.history_box = ctk.CTkTextbox(
+            self.context_pane,
+            width=HISTORY_BOX_WIDTH,
+            height=HISTORY_BOX_HEIGHT,
+        )
+        self.history_box.grid(row=5, column=0, sticky="w", padx=16, pady=(0, 10))
         self.history_box.configure(state="disabled")
 
-        ctk.CTkLabel(self.case_entry_frame, text="* Recorded By").grid(
-            row=5, column=0, sticky="w", padx=16, pady=(8, 4)
+        self.action_zero_state_label = ctk.CTkLabel(
+            self.action_pane,
+            text="Please search and select an employee to begin.",
+            anchor="w",
+            justify="left",
+            wraplength=ACTION_PANE_WIDTH - 32,
+            font=ctk.CTkFont(weight="bold"),
+            text_color=("#64748b", "#94a3b8"),
         )
-        self.recorded_by_entry = ctk.CTkEntry(self.case_entry_frame, placeholder_text="Manager name or ID")
-        self.recorded_by_entry.grid(row=6, column=0, sticky="ew", padx=16)
+        self.action_zero_state_label.grid(row=0, column=0, sticky="w", padx=16, pady=(16, 8))
+
+        recorded_by_header = ctk.CTkFrame(self.action_pane, fg_color="transparent")
+        recorded_by_header.grid(row=1, column=0, sticky="w", padx=16, pady=(8, 4))
+        ctk.CTkLabel(recorded_by_header, text="* Recorded By").grid(row=0, column=0, sticky="w")
+        self.change_session_button = ctk.CTkButton(
+            recorded_by_header,
+            text="(Change)",
+            width=80,
+            height=24,
+            command=self._toggle_session_edit,
+            fg_color="transparent",
+            text_color=("#2563eb", "#60a5fa"),
+            hover_color=("#e2e8f0", "#334155"),
+            corner_radius=6,
+        )
+        self.change_session_button.grid(row=0, column=1, sticky="w", padx=(8, 0))
+        self.change_session_button.grid_remove()
+        self.recorded_by_entry = ctk.CTkEntry(
+            self.action_pane,
+            placeholder_text="Manager name or ID",
+            width=RECORDED_BY_WIDTH,
+        )
+        self.recorded_by_entry.grid(row=2, column=0, sticky="w", padx=16)
         self.recorded_by_entry.bind("<KeyRelease>", lambda _event: self._update_save_button_state())
 
-        ctk.CTkLabel(self.case_entry_frame, text="Manager Notes (optional)").grid(
-            row=7, column=0, sticky="w", padx=16, pady=(12, 4)
+        ctk.CTkLabel(self.action_pane, text="Manager Notes (optional)").grid(
+            row=3, column=0, sticky="w", padx=16, pady=(12, 4)
         )
-        self.notes_box = ctk.CTkTextbox(self.case_entry_frame, height=120)
-        self.notes_box.grid(row=8, column=0, sticky="ew", padx=16)
-
-        self.callout_check = ctk.CTkCheckBox(
-            self.case_entry_frame,
-            text="* Log Call-Out",
-            variable=self.callout_var,
-            command=self._update_save_button_state,
+        self.notes_box = ctk.CTkTextbox(
+            self.action_pane,
+            width=NOTES_BOX_WIDTH,
+            height=NOTES_BOX_HEIGHT,
         )
-        self.callout_check.grid(row=9, column=0, sticky="w", padx=16, pady=(12, 8))
+        self.notes_box.grid(row=4, column=0, sticky="w", padx=16)
 
         self.save_button = ctk.CTkButton(
-            self.case_entry_frame,
-            text="Save (Verification Required)",
+            self.action_pane,
+            text="Record Call-Out",
             command=self._open_verification_modal,
             fg_color=("#2563eb", "#1d4ed8"),
             hover_color=("#1d4ed8", "#1e40af"),
@@ -140,14 +215,17 @@ class ArcApp(ctk.CTk):
             height=44,
             corner_radius=10,
         )
-        self.save_button.grid(row=10, column=0, sticky="w", padx=16, pady=(0, 16))
+        self.save_button.grid(row=5, column=0, sticky="w", padx=16, pady=(12, 16))
 
         self.save_hint_label = ctk.CTkLabel(
-            self.case_entry_frame,
-            text="Tip: Enter Recorded By and check Log Call-Out to enable Save.",
+            self.action_pane,
+            text="Tip: Select an employee and enter Recorded By to record a call-out.",
             anchor="w",
+            wraplength=DETAILS_PANEL_WIDTH,
         )
-        self.save_hint_label.grid(row=11, column=0, sticky="ew", padx=16, pady=(0, 12))
+        self.save_hint_label.grid(row=6, column=0, sticky="w", padx=16, pady=(0, 12))
+
+        self._update_action_zero_state()
 
     def _build_reporting_view(self) -> None:
         self.reporting_frame = ctk.CTkFrame(self)
@@ -172,8 +250,8 @@ class ArcApp(ctk.CTk):
         self._render_top_10()
 
     def _build_status_bar(self) -> None:
-        status_frame = ctk.CTkFrame(self)
-        status_frame.grid(row=2, column=0, sticky="ew", padx=16, pady=(0, 16))
+        status_frame = ctk.CTkFrame(self, width=STATUS_BAR_WIDTH)
+        status_frame.grid(row=2, column=0, sticky="w", padx=16, pady=(0, 16))
         status_frame.grid_columnconfigure(0, weight=1)
         self.status_label = ctk.CTkLabel(
             status_frame,
@@ -181,8 +259,9 @@ class ArcApp(ctk.CTk):
             anchor="w",
             font=ctk.CTkFont(weight="bold"),
             text_color=("#EF4444", "#EF4444"),
+            width=STATUS_BAR_WIDTH - 24,
         )
-        self.status_label.grid(row=0, column=0, sticky="ew", padx=12, pady=10)
+        self.status_label.grid(row=0, column=0, sticky="w", padx=12, pady=10)
 
     def _handle_view_change(self, view_name: str) -> None:
         self.current_view.set(view_name)
@@ -209,6 +288,99 @@ class ArcApp(ctk.CTk):
         self.history_box.insert("1.0", text)
         self.history_box.configure(state="disabled")
 
+    def _clear_match_cards(self) -> None:
+        for widget in self.match_cards_frame.winfo_children():
+            widget.destroy()
+
+    def _render_match_cards(self, options: list[str]) -> None:
+        self._clear_match_cards()
+        ctk.CTkLabel(
+            self.match_cards_frame,
+            text="Select from matching employees:",
+            anchor="w",
+        ).grid(row=0, column=0, sticky="w", padx=8, pady=(6, 4))
+        for idx, option in enumerate(options, start=1):
+            ctk.CTkButton(
+                self.match_cards_frame,
+                text=option,
+                command=lambda selected=option: self._handle_match_selection(selected),
+                width=MATCH_CARDS_WIDTH - 24,
+                anchor="w",
+            ).grid(row=idx, column=0, sticky="w", padx=8, pady=2)
+
+    def _show_sign_in_modal(self) -> None:
+        modal = ctk.CTkToplevel(self)
+        modal.title("Manager Sign In")
+        modal.geometry("380x185")
+        modal.grab_set()
+        modal.resizable(False, False)
+        modal.protocol("WM_DELETE_WINDOW", lambda: None)
+
+        ctk.CTkLabel(modal, text="Sign in to begin your session:", anchor="w").pack(
+            fill="x", padx=16, pady=(16, 8)
+        )
+        name_entry = ctk.CTkEntry(modal, placeholder_text="Your name")
+        name_entry.pack(fill="x", padx=16, pady=(0, 4))
+        error_label = ctk.CTkLabel(modal, text="", text_color=("#EF4444", "#EF4444"))
+        error_label.pack(fill="x", padx=16)
+
+        def sign_in() -> None:
+            name = name_entry.get().strip()
+            if not name:
+                error_label.configure(text="Name is required to continue.")
+                return
+            self.session_manager = name
+            modal.destroy()
+            self._apply_session_manager()
+
+        name_entry.bind("<Return>", lambda _event: sign_in())
+        ctk.CTkButton(modal, text="Sign In", command=sign_in).pack(
+            fill="x", padx=16, pady=(8, 16)
+        )
+
+    def _apply_session_manager(self) -> None:
+        self.recorded_by_entry.configure(state="normal")
+        self.recorded_by_entry.delete(0, "end")
+        self.recorded_by_entry.insert(0, self.session_manager or "")
+        self.recorded_by_entry.configure(state="disabled")
+        self.change_session_button.configure(text="(Change)")
+        self.change_session_button.grid()
+        self._update_save_button_state()
+
+    def _toggle_session_edit(self) -> None:
+        current_state = self.recorded_by_entry.cget("state")
+        if current_state == "disabled":
+            self.recorded_by_entry.configure(state="normal")
+            self.recorded_by_entry.focus()
+            self.change_session_button.configure(text="Confirm")
+        else:
+            name = self.recorded_by_entry.get().strip()
+            if not name:
+                return
+            self.session_manager = name
+            self.recorded_by_entry.configure(state="disabled")
+            self.change_session_button.configure(text="(Change)")
+            self._update_save_button_state()
+
+    def _update_action_zero_state(self) -> None:
+        if self.current_employee_id is None:
+            self.action_zero_state_label.configure(text="Please search and select an employee to begin.")
+        else:
+            self.action_zero_state_label.configure(text=f"Ready to record for: {self.current_employee_name}")
+
+    @staticmethod
+    def _is_exact_search_match(employee: dict[str, object], query: str) -> bool:
+        normalized_query = query.strip().lower()
+        if not normalized_query:
+            return False
+
+        employee_id = str(employee.get("employee_id", "")).strip().lower()
+        first_name = str(employee.get("first_name", "")).strip().lower()
+        last_name = str(employee.get("last_name", "")).strip().lower()
+        full_name = f"{first_name} {last_name}".strip()
+
+        return normalized_query in {employee_id, first_name, last_name, full_name}
+
     def _update_top10_text(self, text: str) -> None:
         self.top10_box.configure(state="normal")
         self.top10_box.delete("1.0", "end")
@@ -233,7 +405,11 @@ class ArcApp(ctk.CTk):
         self.current_employee_id = employee["employee_id"]
         self.current_employee_name = f"{employee['first_name']} {employee['last_name']}"
         self.employee_label.configure(text=f"{self.current_employee_name} (ID: {self.current_employee_id})")
+        self.match_selector.grid_remove()
+        self.match_cards_frame.grid_remove()
+        self._clear_match_cards()
         self._update_history_text(UiController.format_history(payload["history"]))
+        self._update_action_zero_state()
         self._update_save_button_state()
         self._set_status("Employee loaded")
 
@@ -256,6 +432,12 @@ class ArcApp(ctk.CTk):
         if not matches:
             self.match_map = {}
             self.match_selector.grid_remove()
+            self.match_cards_frame.grid_remove()
+            self._clear_match_cards()
+            self.current_employee_id = None
+            self.current_employee_name = ""
+            self.employee_label.configure(text="None")
+            self._update_action_zero_state()
             self._set_status("No employee matches found", is_error=True)
             if query.isdigit():
                 should_add = messagebox.askyesno(
@@ -266,9 +448,11 @@ class ArcApp(ctk.CTk):
                     self._open_add_employee_modal(int(query))
             return
 
-        if len(matches) == 1:
+        if len(matches) == 1 and self._is_exact_search_match(matches[0], query):
             self.match_map = {}
             self.match_selector.grid_remove()
+            self.match_cards_frame.grid_remove()
+            self._clear_match_cards()
             self._load_employee(int(matches[0]["employee_id"]))
             return
 
@@ -277,17 +461,18 @@ class ArcApp(ctk.CTk):
             for row in matches
         }
         options = list(self.match_map.keys())
-        self.match_selector.configure(values=options)
-        self._suppress_match_selection = True
-        self.match_selector.set(options[0])
-        self._suppress_match_selection = False
-        self.match_selector.grid()
+        self._render_match_cards(options)
+        self.match_cards_frame.grid()
         self.current_employee_id = None
         self.current_employee_name = ""
         self.employee_label.configure(text="None")
         self._update_history_text("NONE")
+        self._update_action_zero_state()
         self._update_save_button_state()
-        self._set_status("Multiple matches found. Select employee.", is_error=True)
+        if len(matches) == 1:
+            self._set_status("Partial match found. Select employee to confirm.", is_error=True)
+        else:
+            self._set_status("Multiple matches found. Select employee.", is_error=True)
 
     def _handle_match_selection(self, selected: str) -> None:
         if self._suppress_match_selection:
@@ -345,17 +530,14 @@ class ArcApp(ctk.CTk):
         can_save = UiController.can_enable_save(
             current_employee_id=self.current_employee_id,
             recorded_by=self.recorded_by_entry.get(),
-            callout_checked=self.callout_var.get(),
         )
         if can_save:
-            self.save_hint_label.configure(text="Ready: click Save to open the verification modal.")
+            self.save_hint_label.configure(text="Ready: click Record Call-Out to open the verification modal.")
         else:
             if self.current_employee_id is None:
                 self.save_hint_label.configure(text="Required action: Search and select an employee first.")
             elif not self.recorded_by_entry.get().strip():
                 self.save_hint_label.configure(text="Required action: Enter Recorded By before saving.")
-            elif not self.callout_var.get():
-                self.save_hint_label.configure(text="Required action: Check Log Call-Out before saving.")
             else:
                 self.save_hint_label.configure(text="Required action: complete all required fields.")
 
@@ -366,10 +548,6 @@ class ArcApp(ctk.CTk):
 
         if not self.recorded_by_entry.get().strip():
             self.save_hint_label.configure(text="Required action: Enter Recorded By before saving.")
-            return
-
-        if not self.callout_var.get():
-            self.save_hint_label.configure(text="Required action: Check Log Call-Out before saving.")
             return
 
         recorded_by = self.recorded_by_entry.get().strip()
@@ -412,12 +590,15 @@ class ArcApp(ctk.CTk):
                 messagebox.showerror("Validation", str(exc))
                 return
             modal.destroy()
-            self.callout_var.set(False)
+            self.recorded_by_entry.configure(state="normal")
             self.recorded_by_entry.delete(0, "end")
             self.notes_box.delete("1.0", "end")
             self._handle_lookup()
             self._render_top_10()
-            self._update_save_button_state()
+            if self.session_manager:
+                self._apply_session_manager()
+            else:
+                self._update_save_button_state()
             self._set_status("Call-out saved")
 
         ctk.CTkButton(button_row, text="Confirm", command=confirm_save).grid(
