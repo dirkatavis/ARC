@@ -23,7 +23,7 @@ class UiController:
         return current_employee_id is not None and bool(recorded_by.strip())
 
     @staticmethod
-    def format_history(history: str | list[dict[str, object]]) -> str:
+    def format_history(history: str | list[dict[str, object]], max_entries: int | None = None) -> str:
         if history == "NONE":
             return "NONE"
 
@@ -33,6 +33,12 @@ class UiController:
             recorded_by = str(row.get("recorded_by", ""))
             notes = str(row.get("notes", "") or "")
             lines.append(f"{timestamp} | {recorded_by} | {notes}")
+
+        if max_entries is not None:
+            total = len(lines)
+            lines = lines[:max_entries]
+            if total > max_entries:
+                lines.insert(0, f"(Showing {max_entries} most recent of {total} entries)")
         return "\n".join(lines)
 
     @staticmethod
