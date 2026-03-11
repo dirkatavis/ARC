@@ -27,9 +27,9 @@ Move from a form-first layout to a workflow-first layout while preserving existi
 - [x] Evaluate replacement of Log Call-Out checkbox with validation-driven Confirm & Save enablement.
 
 ### 4) Visual hierarchy and feedback refinements
-- [ ] Reposition status indicator to top-right header or standardized footer treatment.
-- [ ] Improve notes entry readability (font sizing/monospace evaluation).
-- [ ] Normalize primary action button sizing and completed-state feedback color.
+- [x] Reposition status indicator to top-right header or standardized footer treatment.
+- [x] Improve notes entry readability (font sizing/monospace evaluation).
+- [x] Normalize primary action button sizing and completed-state feedback color.
 
 ### 5) Information architecture alignment
 - [ ] Global header with view selector + manager session info.

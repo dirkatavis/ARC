@@ -34,7 +34,9 @@ HISTORY_BOX_HEIGHT = 130
 RECORDED_BY_WIDTH = 300
 NOTES_BOX_WIDTH = 320
 NOTES_BOX_HEIGHT = 90
-STATUS_BAR_WIDTH = 420
+NOTES_FONT_FAMILY = "Courier New"
+NOTES_FONT_SIZE = 13
+SAVE_BUTTON_HEIGHT = 40
 
 
 class ArcApp(ctk.CTk):
@@ -200,6 +202,7 @@ class ArcApp(ctk.CTk):
             self.action_pane,
             width=NOTES_BOX_WIDTH,
             height=NOTES_BOX_HEIGHT,
+            font=ctk.CTkFont(family=NOTES_FONT_FAMILY, size=NOTES_FONT_SIZE),
         )
         self.notes_box.grid(row=4, column=0, sticky="w", padx=16)
 
@@ -211,11 +214,10 @@ class ArcApp(ctk.CTk):
             hover_color=("#1d4ed8", "#1e40af"),
             text_color=("#ffffff", "#ffffff"),
             text_color_disabled=("#94a3b8", "#94a3b8"),
-            width=320,
-            height=44,
-            corner_radius=10,
+            height=SAVE_BUTTON_HEIGHT,
+            corner_radius=8,
         )
-        self.save_button.grid(row=5, column=0, sticky="w", padx=16, pady=(12, 16))
+        self.save_button.grid(row=5, column=0, sticky="ew", padx=16, pady=(12, 16))
 
         self.save_hint_label = ctk.CTkLabel(
             self.action_pane,
@@ -250,8 +252,8 @@ class ArcApp(ctk.CTk):
         self._render_top_10()
 
     def _build_status_bar(self) -> None:
-        status_frame = ctk.CTkFrame(self, width=STATUS_BAR_WIDTH)
-        status_frame.grid(row=2, column=0, sticky="w", padx=16, pady=(0, 16))
+        status_frame = ctk.CTkFrame(self)
+        status_frame.grid(row=2, column=0, sticky="ew", padx=16, pady=(0, 16))
         status_frame.grid_columnconfigure(0, weight=1)
         self.status_label = ctk.CTkLabel(
             status_frame,
@@ -259,9 +261,8 @@ class ArcApp(ctk.CTk):
             anchor="w",
             font=ctk.CTkFont(weight="bold"),
             text_color=("#EF4444", "#EF4444"),
-            width=STATUS_BAR_WIDTH - 24,
         )
-        self.status_label.grid(row=0, column=0, sticky="w", padx=12, pady=10)
+        self.status_label.grid(row=0, column=0, sticky="ew", padx=12, pady=10)
 
     def _handle_view_change(self, view_name: str) -> None:
         self.current_view.set(view_name)
@@ -276,6 +277,21 @@ class ArcApp(ctk.CTk):
     def _set_status(self, message: str, is_error: bool = False) -> None:
         text_color = ("#EF4444", "#EF4444") if is_error else ("#16A34A", "#16A34A")
         self.status_label.configure(text=f"Status: {message}", text_color=text_color)
+
+    def _flash_save_success(self) -> None:
+        self.save_button.configure(
+            text="✓ Saved!",
+            fg_color=("#16A34A", "#15803d"),
+            hover_color=("#15803d", "#166534"),
+        )
+        self.after(1500, self._restore_save_button)
+
+    def _restore_save_button(self) -> None:
+        self.save_button.configure(
+            text="Record Call-Out",
+            fg_color=("#2563eb", "#1d4ed8"),
+            hover_color=("#1d4ed8", "#1e40af"),
+        )
 
     def _handle_runtime_error(self, user_message: str, context: str, exc: Exception) -> None:
         append_error_log(self.error_log_path, context, exc)
@@ -600,6 +616,7 @@ class ArcApp(ctk.CTk):
             else:
                 self._update_save_button_state()
             self._set_status("Call-out saved")
+            self._flash_save_success()
 
         ctk.CTkButton(button_row, text="Confirm", command=confirm_save).grid(
             row=0, column=0, sticky="ew", padx=(0, 8), pady=8
