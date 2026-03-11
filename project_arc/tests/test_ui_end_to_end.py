@@ -1,3 +1,5 @@
+# pylint: disable=redefined-outer-name,protected-access,unused-argument
+
 """ARC UI end-to-end contract tests.
 
 These tests mirror the requested acceptance suite. Implemented behaviors are
@@ -549,7 +551,7 @@ def test_toggle_session_edit_unlocks_and_relocks(ui_gate, app_with_session) -> N
 
 
 def test_session_recorded_by_refills_after_save(ui_gate, app_with_session) -> None:
-    app, connection, _service = app_with_session
+    app = app_with_session[0]
 
     app.search_entry.delete(0, "end")
     app.search_entry.insert(0, "1001")

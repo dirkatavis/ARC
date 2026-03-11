@@ -14,10 +14,11 @@ import sys
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 REPO_ROOT = PROJECT_ROOT.parent
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
-from src.database import DatabaseManager
+from project_arc.src.database import DatabaseManager
+from project_arc.tools.seed_sample_data import seed_database
 
 
 def _run_command(args: list[str]) -> None:
@@ -47,8 +48,6 @@ def initialize_database(db_path: Path) -> None:
 
 def seed_sample_data(db_path: Path, reset: bool) -> None:
     print("[ARC] Seeding sample data...")
-    from tools.seed_sample_data import seed_database
-
     result = seed_database(db_path=db_path, reset=reset)
     print(
         "[ARC] Seed complete: "
@@ -59,7 +58,7 @@ def seed_sample_data(db_path: Path, reset: bool) -> None:
 
 def launch_arc() -> int:
     print("[ARC] Launching ARC...")
-    run = subprocess.run([sys.executable, str(PROJECT_ROOT / "main.py")])
+    run = subprocess.run([sys.executable, str(PROJECT_ROOT / "main.py")], check=False)
     return int(run.returncode)
 
 
@@ -102,7 +101,7 @@ def main() -> int:
     except subprocess.CalledProcessError as exc:
         print(f"[ARC] Command failed with exit code {exc.returncode}")
         return int(exc.returncode)
-    except Exception as exc:  # defensive top-level error boundary
+    except (ImportError, OSError, sqlite3.Error) as exc:
         print(f"[ARC] Setup failed: {exc}")
         return 1
 
