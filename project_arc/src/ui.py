@@ -174,7 +174,13 @@ class ArcApp(ctk.CTk):
         status_frame = ctk.CTkFrame(self)
         status_frame.grid(row=2, column=0, sticky="ew", padx=16, pady=(0, 16))
         status_frame.grid_columnconfigure(0, weight=1)
-        self.status_label = ctk.CTkLabel(status_frame, text="", anchor="w")
+        self.status_label = ctk.CTkLabel(
+            status_frame,
+            text="",
+            anchor="w",
+            font=ctk.CTkFont(weight="bold"),
+            text_color=("#EF4444", "#EF4444"),
+        )
         self.status_label.grid(row=0, column=0, sticky="ew", padx=12, pady=10)
 
     def _handle_view_change(self, view_name: str) -> None:
@@ -187,13 +193,14 @@ class ArcApp(ctk.CTk):
             self.reporting_frame.grid_remove()
             self.case_entry_frame.grid()
 
-    def _set_status(self, message: str) -> None:
-        self.status_label.configure(text=f"Status: {message}")
+    def _set_status(self, message: str, is_error: bool = False) -> None:
+        text_color = ("#EF4444", "#EF4444") if is_error else ("#16A34A", "#16A34A")
+        self.status_label.configure(text=f"Status: {message}", text_color=text_color)
 
     def _handle_runtime_error(self, user_message: str, context: str, exc: Exception) -> None:
         append_error_log(self.error_log_path, context, exc)
         messagebox.showerror("Database Error", user_message)
-        self._set_status("Database unavailable")
+        self._set_status("Database unavailable", is_error=True)
 
     def _update_history_text(self, text: str) -> None:
         self.history_box.configure(state="normal")
@@ -218,7 +225,7 @@ class ArcApp(ctk.CTk):
             )
             return
         except ValueError:
-            self._set_status("Employee not found")
+            self._set_status("Employee not found", is_error=True)
             return
 
         employee = payload["employee"]
@@ -246,6 +253,7 @@ class ArcApp(ctk.CTk):
             return
 
         if not matches:
+            self._set_status("No employee matches found", is_error=True)
             if query.isdigit():
                 should_add = messagebox.askyesno(
                     "Employee Not Found",
@@ -253,8 +261,6 @@ class ArcApp(ctk.CTk):
                 )
                 if should_add:
                     self._open_add_employee_modal(int(query))
-            else:
-                self._set_status("No employee matches found")
             return
 
         if len(matches) == 1:

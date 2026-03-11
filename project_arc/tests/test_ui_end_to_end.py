@@ -370,6 +370,20 @@ def test_search_by_first_or_last_name_loads_employee(ui_gate, app_with_db) -> No
     assert "Nia Bishop" in app.employee_label.cget("text")
 
 
+def test_multiple_matches_shows_selector_without_auto_loading(ui_gate, app_with_db) -> None:
+    app, _connection, service = app_with_db
+
+    service.add_employee(2001, "Alex", "Green")
+    service.add_employee(2002, "Alex", "Brown")
+
+    app.search_entry.delete(0, "end")
+    app.search_entry.insert(0, "Alex")
+    app._handle_lookup()
+
+    assert app.employee_label.cget("text") == "None"
+    assert app.match_selector.winfo_manager() == "grid"
+
+
 def test_top10_resides_on_reporting_view(ui_gate, app_with_db) -> None:
     app, _connection, _service = app_with_db
 
