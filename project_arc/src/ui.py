@@ -30,7 +30,8 @@ DETAILS_PANEL_WIDTH = 420
 MATCH_SELECTOR_WIDTH = 420
 MATCH_CARDS_WIDTH = 420
 HISTORY_BOX_WIDTH = 420
-HISTORY_BOX_HEIGHT = 130
+HISTORY_BOX_HEIGHT = 200
+HISTORY_MAX_ENTRIES = 10
 RECORDED_BY_WIDTH = 300
 NOTES_BOX_WIDTH = 320
 NOTES_BOX_HEIGHT = 90
@@ -89,6 +90,15 @@ class ArcApp(ctk.CTk):
             width=VIEW_SELECTOR_WIDTH,
         )
         self.view_selector.grid(row=0, column=1, sticky="w", padx=8, pady=10)
+
+        self.session_header_label = ctk.CTkLabel(
+            nav,
+            text="Not signed in",
+            anchor="e",
+            text_color=("#64748b", "#94a3b8"),
+            font=ctk.CTkFont(size=12),
+        )
+        self.session_header_label.grid(row=0, column=2, sticky="e", padx=(8, 12), pady=10)
 
     def _build_case_entry_view(self) -> None:
         self.case_entry_frame = ctk.CTkFrame(self)
@@ -156,6 +166,7 @@ class ArcApp(ctk.CTk):
             self.context_pane,
             width=HISTORY_BOX_WIDTH,
             height=HISTORY_BOX_HEIGHT,
+            wrap="none",
         )
         self.history_box.grid(row=5, column=0, sticky="w", padx=16, pady=(0, 10))
         self.history_box.configure(state="disabled")
@@ -195,8 +206,17 @@ class ArcApp(ctk.CTk):
         self.recorded_by_entry.grid(row=2, column=0, sticky="w", padx=16)
         self.recorded_by_entry.bind("<KeyRelease>", lambda _event: self._update_save_button_state())
 
+        self.recorded_by_hint_label = ctk.CTkLabel(
+            self.action_pane,
+            text="",
+            anchor="w",
+            font=ctk.CTkFont(size=11),
+            text_color=("#64748b", "#94a3b8"),
+        )
+        self.recorded_by_hint_label.grid(row=3, column=0, sticky="w", padx=16, pady=(1, 0))
+
         ctk.CTkLabel(self.action_pane, text="Manager Notes (optional)").grid(
-            row=3, column=0, sticky="w", padx=16, pady=(12, 4)
+            row=4, column=0, sticky="w", padx=16, pady=(8, 4)
         )
         self.notes_box = ctk.CTkTextbox(
             self.action_pane,
@@ -204,7 +224,7 @@ class ArcApp(ctk.CTk):
             height=NOTES_BOX_HEIGHT,
             font=ctk.CTkFont(family=NOTES_FONT_FAMILY, size=NOTES_FONT_SIZE),
         )
-        self.notes_box.grid(row=4, column=0, sticky="w", padx=16)
+        self.notes_box.grid(row=5, column=0, sticky="w", padx=16)
 
         self.save_button = ctk.CTkButton(
             self.action_pane,
@@ -217,7 +237,7 @@ class ArcApp(ctk.CTk):
             height=SAVE_BUTTON_HEIGHT,
             corner_radius=8,
         )
-        self.save_button.grid(row=5, column=0, sticky="ew", padx=16, pady=(12, 16))
+        self.save_button.grid(row=6, column=0, sticky="ew", padx=16, pady=(12, 16))
 
         self.save_hint_label = ctk.CTkLabel(
             self.action_pane,
@@ -225,7 +245,7 @@ class ArcApp(ctk.CTk):
             anchor="w",
             wraplength=DETAILS_PANEL_WIDTH,
         )
-        self.save_hint_label.grid(row=6, column=0, sticky="w", padx=16, pady=(0, 12))
+        self.save_hint_label.grid(row=7, column=0, sticky="w", padx=16, pady=(0, 12))
 
         self._update_action_zero_state()
 
@@ -361,6 +381,7 @@ class ArcApp(ctk.CTk):
         self.recorded_by_entry.configure(state="disabled")
         self.change_session_button.configure(text="(Change)")
         self.change_session_button.grid()
+        self.session_header_label.configure(text=f"Signed in as: {self.session_manager}")
         self._update_save_button_state()
 
     def _toggle_session_edit(self) -> None:
@@ -376,6 +397,7 @@ class ArcApp(ctk.CTk):
             self.session_manager = name
             self.recorded_by_entry.configure(state="disabled")
             self.change_session_button.configure(text="(Change)")
+            self.session_header_label.configure(text=f"Signed in as: {self.session_manager}")
             self._update_save_button_state()
 
     def _update_action_zero_state(self) -> None:
@@ -424,7 +446,7 @@ class ArcApp(ctk.CTk):
         self.match_selector.grid_remove()
         self.match_cards_frame.grid_remove()
         self._clear_match_cards()
-        self._update_history_text(UiController.format_history(payload["history"]))
+        self._update_history_text(UiController.format_history(payload["history"], max_entries=HISTORY_MAX_ENTRIES))
         self._update_action_zero_state()
         self._update_save_button_state()
         self._set_status("Employee loaded")
@@ -473,7 +495,7 @@ class ArcApp(ctk.CTk):
             return
 
         self.match_map = {
-            f"{row['employee_id']} - {row['first_name']} {row['last_name']}": int(row["employee_id"])
+            f"{row['first_name']} {row['last_name']}  (ID: {row['employee_id']})": int(row["employee_id"])
             for row in matches
         }
         options = list(self.match_map.keys())
@@ -547,12 +569,21 @@ class ArcApp(ctk.CTk):
             current_employee_id=self.current_employee_id,
             recorded_by=self.recorded_by_entry.get(),
         )
+        recorded_by_value = self.recorded_by_entry.get().strip()
+        if recorded_by_value:
+            self.recorded_by_hint_label.configure(
+                text="✓ Set", text_color=("#16A34A", "#4ade80")
+            )
+        else:
+            self.recorded_by_hint_label.configure(
+                text="Required", text_color=("#EF4444", "#f87171")
+            )
         if can_save:
             self.save_hint_label.configure(text="Ready: click Record Call-Out to open the verification modal.")
         else:
             if self.current_employee_id is None:
                 self.save_hint_label.configure(text="Required action: Search and select an employee first.")
-            elif not self.recorded_by_entry.get().strip():
+            elif not recorded_by_value:
                 self.save_hint_label.configure(text="Required action: Enter Recorded By before saving.")
             else:
                 self.save_hint_label.configure(text="Required action: complete all required fields.")

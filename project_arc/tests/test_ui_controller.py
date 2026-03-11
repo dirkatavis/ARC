@@ -44,6 +44,18 @@ def test_format_history_renders_rows() -> None:
     assert "2026-03-09 06:45:00 | ManagerY | Weather delay" in result
 
 
+def test_format_history_max_entries_limits_output() -> None:
+    # rows in descending order (newest first) matching service return order
+    rows = [
+        {"timestamp": f"2026-01-{i:02d}", "recorded_by": f"Mgr{i:02d}", "notes": ""}
+        for i in range(15, 0, -1)
+    ]
+    result = UiController.format_history(rows, max_entries=10)
+    assert "Mgr15" in result    # newest entry present
+    assert "| Mgr05 |" not in result  # oldest entries excluded
+    assert "most recent" in result
+
+
 def test_format_top_10_empty_message() -> None:
     assert UiController.format_top_10([]) == "No call-out data yet."
 

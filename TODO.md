@@ -32,10 +32,10 @@ Move from a form-first layout to a workflow-first layout while preserving existi
 - [x] Normalize primary action button sizing and completed-state feedback color.
 
 ### 5) Information architecture alignment
-- [ ] Global header with view selector + manager session info.
-- [ ] Search result list optimized for duplicate-name disambiguation.
-- [ ] History panel constrained to recent entries, with scroll.
-- [ ] Action form with top-aligned labels and auto-validation messaging.
+- [x] Global header with view selector + manager session info.
+- [x] Search result list optimized for duplicate-name disambiguation.
+- [x] History panel constrained to recent entries, with scroll.
+- [x] Action form with top-aligned labels and auto-validation messaging.
 
 ## Delivery Strategy
 - Implement one section at a time.

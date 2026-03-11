@@ -368,7 +368,7 @@ def test_partial_single_match_requires_explicit_selection(ui_gate, app_with_db) 
     assert app.match_cards_frame.winfo_manager() == "grid"
     assert app.status_label.cget("text") == "Status: Partial match found. Select employee to confirm."
 
-    johnson_option = next(key for key in app.match_map if key.startswith("2201 - "))
+    johnson_option = next(key for key in app.match_map if "(ID: 2201)" in key)
     app._handle_match_selection(johnson_option)
 
     assert "Mila Johnson" in app.employee_label.cget("text")
@@ -400,7 +400,7 @@ def test_multiple_matches_shows_selector_without_auto_loading(ui_gate, app_with_
     assert app.match_cards_frame.winfo_manager() == "grid"
     assert app.status_label.cget("text") == "Status: Multiple matches found. Select employee."
 
-    alex_green_option = next(key for key in app.match_map if key.startswith("2001 - "))
+    alex_green_option = next(key for key in app.match_map if "(ID: 2001)" in key)
     app._handle_match_selection(alex_green_option)
 
     assert "Alex Green" in app.employee_label.cget("text")
@@ -408,7 +408,7 @@ def test_multiple_matches_shows_selector_without_auto_loading(ui_gate, app_with_
     assert "MgrAlpha" in history_text
     assert "Alex Green distinct note" in history_text
 
-    alex_brown_option = next(key for key in app.match_map if key.startswith("2002 - "))
+    alex_brown_option = next(key for key in app.match_map if "(ID: 2002)" in key)
     app._handle_match_selection(alex_brown_option)
 
     assert "Alex Brown" in app.employee_label.cget("text")
@@ -442,14 +442,14 @@ def test_multiple_last_name_matches_show_selector_without_auto_loading(ui_gate, 
     assert app.employee_label.cget("text") == "None"
     assert app.match_cards_frame.winfo_manager() == "grid"
 
-    jamie_smith_option = next(key for key in app.match_map if key.startswith("2011 - "))
+    jamie_smith_option = next(key for key in app.match_map if "(ID: 2011)" in key)
     app._handle_match_selection(jamie_smith_option)
     assert "Jamie Smith" in app.employee_label.cget("text")
     history_text = app.history_box.get("1.0", "end")
     assert "MgrSmithA" in history_text
     assert "Jamie Smith distinct note" in history_text
 
-    noah_smith_option = next(key for key in app.match_map if key.startswith("2012 - "))
+    noah_smith_option = next(key for key in app.match_map if "(ID: 2012)" in key)
     app._handle_match_selection(noah_smith_option)
     assert "Noah Smith" in app.employee_label.cget("text")
     history_text = app.history_box.get("1.0", "end")
@@ -577,4 +577,80 @@ def test_save_enabled_without_checkbox_when_employee_and_recorded_by_set(ui_gate
 
     # Session auto-fills Recorded By — save should be ready with no checkbox
     assert "Ready:" in app.save_hint_label.cget("text")
+
+
+# ── Section 5: Information architecture alignment tests ───────────────────
+
+def test_session_header_label_shows_manager_name(ui_gate, app_with_session) -> None:
+    app, _connection, _service = app_with_session
+
+    assert "TestManager" in app.session_header_label.cget("text")
+    assert "Signed in as:" in app.session_header_label.cget("text")
+
+
+def test_session_header_updates_after_change(ui_gate, app_with_session) -> None:
+    app, _connection, _service = app_with_session
+
+    app._toggle_session_edit()
+    app.recorded_by_entry.delete(0, "end")
+    app.recorded_by_entry.insert(0, "UpdatedManager")
+    app._toggle_session_edit()
+
+    assert "UpdatedManager" in app.session_header_label.cget("text")
+
+
+def test_match_cards_show_name_before_id(ui_gate, app_with_db) -> None:
+    app, _connection, service = app_with_db
+
+    service.add_employee(3001, "Quinn", "Archer")
+    service.add_employee(3002, "Quinn", "Blake")
+
+    app.search_entry.delete(0, "end")
+    app.search_entry.insert(0, "Quinn")
+    app._handle_lookup()
+
+    keys = list(app.match_map.keys())
+    assert all("Quinn" in k for k in keys)
+    assert any("(ID: 3001)" in k for k in keys)
+    assert any("(ID: 3002)" in k for k in keys)
+    # Name appears before ID in the key string
+    for k in keys:
+        name_pos = k.index("Quinn")
+        id_pos = k.index("(ID:")
+        assert name_pos < id_pos
+
+
+def test_recorded_by_hint_shows_required_when_empty(ui_gate, app_with_db) -> None:
+    app, _connection, _service = app_with_db
+
+    app._update_save_button_state()
+
+    assert "Required" in app.recorded_by_hint_label.cget("text")
+
+
+def test_recorded_by_hint_shows_set_when_filled(ui_gate, app_with_db) -> None:
+    app, _connection, _service = app_with_db
+
+    app.recorded_by_entry.insert(0, "ManagerZ")
+    app._update_save_button_state()
+
+    hint = app.recorded_by_hint_label.cget("text")
+    assert "✓" in hint or "Set" in hint
+
+
+def test_history_constrained_to_max_entries(ui_gate, app_with_db) -> None:
+    app, _connection, service = app_with_db
+
+    for i in range(15):
+        service.log_call_out(1001, recorded_by=f"Mgr{i}", notes=f"note{i}")
+
+    app.search_entry.delete(0, "end")
+    app.search_entry.insert(0, "1001")
+    app._handle_lookup()
+
+    history_text = app.history_box.get("1.0", "end")
+    # Only the most recent 10 call-out data lines should appear
+    # (plus an optional header line about showing N most recent)
+    assert "Mgr14" in history_text   # most recent is present
+    assert "Mgr0 " not in history_text  # oldest excluded (space avoids matching "Mgr0x")
 
