@@ -69,6 +69,15 @@ def _find_button_by_text(parent, text: str):
     return None
 
 
+def _find_entries(parent) -> list[ctk.CTkEntry]:
+    entries: list[ctk.CTkEntry] = []
+    for widget in parent.winfo_children():
+        if isinstance(widget, ctk.CTkEntry):
+            entries.append(widget)
+        entries.extend(_find_entries(widget))
+    return entries
+
+
 def _collect_label_text(parent) -> list[str]:
     texts: list[str] = []
     for widget in parent.winfo_children():
@@ -90,6 +99,45 @@ def test_empty_state_visuals_none_and_add_employee_button(ui_gate, app_with_db, 
 
     # Contract item: reveal dedicated Add Employee button for new ID flow.
     pytest.xfail("Dedicated Add Employee button is not implemented in current UI")
+
+
+def test_add_new_employee_does_not_require_callout_checkbox(ui_gate, app_with_db, monkeypatch) -> None:
+    app, connection, _service = app_with_db
+
+    app.callout_var.set(False)
+    monkeypatch.setattr(messagebox, "askyesno", lambda *_args, **_kwargs: True)
+
+    app.search_entry.delete(0, "end")
+    app.search_entry.insert(0, "2999")
+    app._handle_lookup()
+
+    modal = next(modal for modal in _find_toplevels(app) if modal.title() == "Add New Employee")
+    entries = _find_entries(modal)
+    assert len(entries) >= 2
+
+    entries[0].insert(0, "Robin")
+    entries[1].insert(0, "Vale")
+
+    save_employee_btn = _find_button_by_text(modal, "Save Employee")
+    assert save_employee_btn is not None
+    save_employee_btn.invoke()
+    app.update_idletasks()
+
+    row = connection.execute(
+        "SELECT employee_id, first_name, last_name FROM employees WHERE employee_id = ?",
+        (2999,),
+    ).fetchone()
+    call_out_count = connection.execute(
+        "SELECT COUNT(*) FROM call_outs WHERE employee_id = ?",
+        (2999,),
+    ).fetchone()[0]
+
+    assert row is not None
+    assert row[0] == 2999
+    assert row[1] == "Robin"
+    assert row[2] == "Vale"
+    assert call_out_count == 0
+    assert app.callout_var.get() is False
 
 
 def test_verification_modal_trigger_blocks_write_until_confirm(ui_gate, app_with_db) -> None:
@@ -248,7 +296,7 @@ def test_navigation_persistence_between_tabs(ui_gate, app_with_db) -> None:
     app._update_save_button_state()
 
     app._handle_view_change("Reporting")
-    app._handle_view_change("Intake")
+    app._handle_view_change("Case Entry")
 
     assert "Ari Cole" in app.employee_label.cget("text")
     assert app.recorded_by_entry.get().strip() == "ManagerPersist"
@@ -293,11 +341,21 @@ def test_database_lock_error_feedback(ui_gate, app_with_db, monkeypatch) -> None
     assert app.status_label.cget("text") == "Status: Database unavailable"
 
 
-def test_intake_has_no_logger_console_title(ui_gate, app_with_db) -> None:
+def test_case_entry_has_no_logger_console_title(ui_gate, app_with_db) -> None:
     app, _connection, _service = app_with_db
 
     labels = _collect_label_text(app)
     assert "Logger Console" not in labels
+
+
+def test_navigation_selector_uses_case_entry_label(ui_gate, app_with_db) -> None:
+    app, _connection, _service = app_with_db
+
+    nav_values = tuple(app.view_selector.cget("values"))
+
+    assert "Case Entry" in nav_values
+    assert "Reporting" in nav_values
+    assert "Intake" not in nav_values
 
 
 def test_search_by_first_or_last_name_loads_employee(ui_gate, app_with_db) -> None:
@@ -315,14 +373,14 @@ def test_search_by_first_or_last_name_loads_employee(ui_gate, app_with_db) -> No
 def test_top10_resides_on_reporting_view(ui_gate, app_with_db) -> None:
     app, _connection, _service = app_with_db
 
-    assert app.current_view.get() == "Intake"
-    assert app.intake_frame.winfo_manager() == "grid"
+    assert app.current_view.get() == "Case Entry"
+    assert app.case_entry_frame.winfo_manager() == "grid"
     assert app.reporting_frame.winfo_manager() == ""
 
     app._handle_view_change("Reporting")
     app.update_idletasks()
 
     assert app.current_view.get() == "Reporting"
-    assert app.intake_frame.winfo_manager() == ""
+    assert app.case_entry_frame.winfo_manager() == ""
     assert app.reporting_frame.winfo_manager() == "grid"
 

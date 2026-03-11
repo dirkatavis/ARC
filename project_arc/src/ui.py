@@ -30,7 +30,7 @@ class ArcApp(ctk.CTk):
         self.current_employee_id: int | None = None
         self.current_employee_name: str = ""
         self.callout_var = tk.BooleanVar(value=False)
-        self.current_view = tk.StringVar(value="Intake")
+        self.current_view = tk.StringVar(value="Case Entry")
         self.match_map: dict[str, int] = {}
 
         ctk.set_appearance_mode("system")
@@ -44,10 +44,10 @@ class ArcApp(ctk.CTk):
         self.grid_rowconfigure(1, weight=1)
 
         self._build_navigation()
-        self._build_intake_view()
+        self._build_case_entry_view()
         self._build_reporting_view()
         self._build_status_bar()
-        self._handle_view_change("Intake")
+        self._handle_view_change("Case Entry")
         self._set_status("Ready")
 
     def _build_navigation(self) -> None:
@@ -58,18 +58,18 @@ class ArcApp(ctk.CTk):
         ctk.CTkLabel(nav, text="View").grid(row=0, column=0, padx=(12, 8), pady=10, sticky="w")
         self.view_selector = ctk.CTkOptionMenu(
             nav,
-            values=["Intake", "Reporting"],
+            values=["Case Entry", "Reporting"],
             variable=self.current_view,
             command=self._handle_view_change,
         )
         self.view_selector.grid(row=0, column=1, sticky="w", padx=8, pady=10)
 
-    def _build_intake_view(self) -> None:
-        self.intake_frame = ctk.CTkFrame(self)
-        self.intake_frame.grid(row=1, column=0, sticky="nsew", padx=16, pady=(0, 8))
-        self.intake_frame.grid_columnconfigure(0, weight=1)
+    def _build_case_entry_view(self) -> None:
+        self.case_entry_frame = ctk.CTkFrame(self)
+        self.case_entry_frame.grid(row=1, column=0, sticky="nsew", padx=16, pady=(0, 8))
+        self.case_entry_frame.grid_columnconfigure(0, weight=1)
 
-        search_row = ctk.CTkFrame(self.intake_frame)
+        search_row = ctk.CTkFrame(self.case_entry_frame)
         search_row.grid(row=0, column=0, sticky="ew", padx=16, pady=(16, 8))
         search_row.grid_columnconfigure(1, weight=1)
 
@@ -85,42 +85,42 @@ class ArcApp(ctk.CTk):
         self.search_button.grid(row=0, column=2, padx=(8, 12), pady=12)
 
         self.match_selector = ctk.CTkOptionMenu(
-            self.intake_frame,
+            self.case_entry_frame,
             values=["No matches"],
             command=self._handle_match_selection,
         )
         self.match_selector.grid(row=1, column=0, sticky="ew", padx=16)
         self.match_selector.grid_remove()
 
-        details = ctk.CTkFrame(self.intake_frame)
+        details = ctk.CTkFrame(self.case_entry_frame)
         details.grid(row=2, column=0, sticky="ew", padx=16, pady=8)
         details.grid_columnconfigure(1, weight=1)
         ctk.CTkLabel(details, text="Selected Employee:").grid(row=0, column=0, padx=12, pady=8, sticky="w")
         self.employee_label = ctk.CTkLabel(details, text="None")
         self.employee_label.grid(row=0, column=1, padx=12, pady=8, sticky="w")
 
-        ctk.CTkLabel(self.intake_frame, text="Past Call-Outs").grid(
+        ctk.CTkLabel(self.case_entry_frame, text="Past Call-Outs").grid(
             row=3, column=0, sticky="w", padx=16, pady=(12, 4)
         )
-        self.history_box = ctk.CTkTextbox(self.intake_frame, height=230)
+        self.history_box = ctk.CTkTextbox(self.case_entry_frame, height=230)
         self.history_box.grid(row=4, column=0, sticky="nsew", padx=16, pady=(0, 10))
         self.history_box.configure(state="disabled")
 
-        ctk.CTkLabel(self.intake_frame, text="* Recorded By").grid(
+        ctk.CTkLabel(self.case_entry_frame, text="* Recorded By").grid(
             row=5, column=0, sticky="w", padx=16, pady=(8, 4)
         )
-        self.recorded_by_entry = ctk.CTkEntry(self.intake_frame, placeholder_text="Manager name or ID")
+        self.recorded_by_entry = ctk.CTkEntry(self.case_entry_frame, placeholder_text="Manager name or ID")
         self.recorded_by_entry.grid(row=6, column=0, sticky="ew", padx=16)
         self.recorded_by_entry.bind("<KeyRelease>", lambda _event: self._update_save_button_state())
 
-        ctk.CTkLabel(self.intake_frame, text="Manager Notes (optional)").grid(
+        ctk.CTkLabel(self.case_entry_frame, text="Manager Notes (optional)").grid(
             row=7, column=0, sticky="w", padx=16, pady=(12, 4)
         )
-        self.notes_box = ctk.CTkTextbox(self.intake_frame, height=120)
+        self.notes_box = ctk.CTkTextbox(self.case_entry_frame, height=120)
         self.notes_box.grid(row=8, column=0, sticky="ew", padx=16)
 
         self.callout_check = ctk.CTkCheckBox(
-            self.intake_frame,
+            self.case_entry_frame,
             text="* Log Call-Out",
             variable=self.callout_var,
             command=self._update_save_button_state,
@@ -128,7 +128,7 @@ class ArcApp(ctk.CTk):
         self.callout_check.grid(row=9, column=0, sticky="w", padx=16, pady=(12, 8))
 
         self.save_button = ctk.CTkButton(
-            self.intake_frame,
+            self.case_entry_frame,
             text="Save (Verification Required)",
             command=self._open_verification_modal,
             fg_color=("#2563eb", "#1d4ed8"),
@@ -142,7 +142,7 @@ class ArcApp(ctk.CTk):
         self.save_button.grid(row=10, column=0, sticky="w", padx=16, pady=(0, 16))
 
         self.save_hint_label = ctk.CTkLabel(
-            self.intake_frame,
+            self.case_entry_frame,
             text="Tip: Enter Recorded By and check Log Call-Out to enable Save.",
             anchor="w",
         )
@@ -180,12 +180,12 @@ class ArcApp(ctk.CTk):
     def _handle_view_change(self, view_name: str) -> None:
         self.current_view.set(view_name)
         if view_name == "Reporting":
-            self.intake_frame.grid_remove()
+            self.case_entry_frame.grid_remove()
             self.reporting_frame.grid()
             self._render_top_10()
         else:
             self.reporting_frame.grid_remove()
-            self.intake_frame.grid()
+            self.case_entry_frame.grid()
 
     def _set_status(self, message: str) -> None:
         self.status_label.configure(text=f"Status: {message}")
