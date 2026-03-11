@@ -21,11 +21,10 @@ def test_parse_employee_id_rejects_non_numeric_input() -> None:
         UiController.parse_employee_id("abc")
 
 
-def test_can_enable_save_requires_employee_recorded_by_and_checkbox() -> None:
-    assert UiController.can_enable_save(1001, "mgr", True) is True
-    assert UiController.can_enable_save(None, "mgr", True) is False
-    assert UiController.can_enable_save(1001, "  ", True) is False
-    assert UiController.can_enable_save(1001, "mgr", False) is False
+def test_can_enable_save_requires_employee_and_recorded_by() -> None:
+    assert UiController.can_enable_save(1001, "mgr") is True
+    assert UiController.can_enable_save(None, "mgr") is False
+    assert UiController.can_enable_save(1001, "  ") is False
 
 
 def test_format_history_supports_none_state() -> None:
