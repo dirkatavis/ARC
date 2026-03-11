@@ -1,4 +1,4 @@
-# pylint: disable=redefined-outer-name,protected-access,unused-argument
+# pylint: disable=redefined-outer-name,protected-access,unused-argument,missing-function-docstring
 
 """ARC UI end-to-end contract tests.
 

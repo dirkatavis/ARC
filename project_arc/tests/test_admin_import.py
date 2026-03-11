@@ -1,6 +1,6 @@
 """TDD tests for admin roster CSV import utility."""
 
-# pylint: disable=redefined-outer-name
+# pylint: disable=redefined-outer-name,missing-function-docstring
 
 from __future__ import annotations
 

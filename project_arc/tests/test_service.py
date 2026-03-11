@@ -3,7 +3,7 @@
 All tests use in-memory SQLite fixtures to guarantee isolated execution.
 """
 
-# pylint: disable=redefined-outer-name
+# pylint: disable=redefined-outer-name,missing-function-docstring,missing-class-docstring,too-few-public-methods
 
 from __future__ import annotations
 

@@ -17,6 +17,7 @@ from project_arc.src.database import DatabaseManager
 
 
 def main() -> int:
+    """Import a roster CSV into the target ARC SQLite database."""
     parser = argparse.ArgumentParser(description="Import employee roster CSV into ARC database")
     parser.add_argument("--db", required=True, help="Path to SQLite database file")
     parser.add_argument("--csv", required=True, help="Path to roster CSV file")
