@@ -11,7 +11,7 @@ This flow creates a customer-ready `ARC_Setup.exe` for ARC.
 From repository root:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File project_arc/tools/build_setup.ps1 -Version 1.0.0 -Clean
+powershell -ExecutionPolicy Bypass -File project_arc/tools/build_setup.ps1 -Version 1.1.0 -Clean
 ```
 
 ## Output artifact

@@ -92,7 +92,7 @@ For customer delivery, build a full installer package:
 
 1. Install Inno Setup 6 on the build machine (ensure `iscc.exe` is on `PATH`).
 2. From repo root, run:
-  - `powershell -ExecutionPolicy Bypass -File project_arc/tools/build_setup.ps1 -Version 1.0.0 -Clean`
+  - `powershell -ExecutionPolicy Bypass -File project_arc/tools/build_setup.ps1 -Version 1.1.0 -Clean`
 3. Deliver artifact:
   - `project_arc/dist/installer/ARC_Setup.exe`
 
