@@ -1,5 +1,6 @@
 pytest>=8.0.0
 customtkinter>=5.2.0
+pyinstaller>=6.10.0
 
 # Optional Windows-only UI automation (install manually when needed):
 # pywinauto>=0.6.8

@@ -8,10 +8,11 @@ from pathlib import Path
 import sys
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
+REPO_ROOT = PROJECT_ROOT.parent
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
-from src.database import DatabaseManager
+from project_arc.src.database import DatabaseManager
 
 
 EMPLOYEES = [
@@ -71,6 +72,7 @@ CALL_OUT_PLAN = {
 
 
 def seed_database(db_path: Path, reset: bool) -> dict[str, int]:
+    """Seed demo employees/call-outs and return seeding + total counts."""
     connection = sqlite3.connect(db_path)
     connection.row_factory = sqlite3.Row
     db = DatabaseManager(connection)
@@ -127,6 +129,7 @@ def seed_database(db_path: Path, reset: bool) -> dict[str, int]:
 
 
 def main() -> int:
+    """Parse args and seed the specified ARC SQLite database."""
     parser = argparse.ArgumentParser(description="Seed ARC database with sample data")
     parser.add_argument("--db", required=True, help="Path to SQLite database file")
     parser.add_argument("--reset", action="store_true", help="Clear employees/call_outs before seeding")

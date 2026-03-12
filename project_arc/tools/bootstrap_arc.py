@@ -14,17 +14,20 @@ import sys
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 REPO_ROOT = PROJECT_ROOT.parent
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
-from src.database import DatabaseManager
+from project_arc.src.database import DatabaseManager
+from project_arc.tools.seed_sample_data import seed_database
 
 
 def _run_command(args: list[str]) -> None:
+    """Run a subprocess command and raise if it fails."""
     subprocess.run(args, check=True)
 
 
 def install_runtime_dependencies() -> None:
+    """Install runtime requirements for ARC into the active Python environment."""
     requirements_file = PROJECT_ROOT / "requirements.txt"
     if not requirements_file.exists():
         raise FileNotFoundError(f"Missing requirements file: {requirements_file}")
@@ -35,6 +38,7 @@ def install_runtime_dependencies() -> None:
 
 
 def initialize_database(db_path: Path) -> None:
+    """Create the SQLite database file and initialize ARC schema."""
     print(f"[ARC] Initializing database at {db_path}")
     db_path.parent.mkdir(parents=True, exist_ok=True)
     connection = sqlite3.connect(db_path)
@@ -46,9 +50,8 @@ def initialize_database(db_path: Path) -> None:
 
 
 def seed_sample_data(db_path: Path, reset: bool) -> None:
+    """Seed the database with demo employees and call-out history."""
     print("[ARC] Seeding sample data...")
-    from tools.seed_sample_data import seed_database
-
     result = seed_database(db_path=db_path, reset=reset)
     print(
         "[ARC] Seed complete: "
@@ -58,12 +61,14 @@ def seed_sample_data(db_path: Path, reset: bool) -> None:
 
 
 def launch_arc() -> int:
+    """Launch the ARC desktop UI and return process exit code."""
     print("[ARC] Launching ARC...")
-    run = subprocess.run([sys.executable, str(PROJECT_ROOT / "main.py")])
+    run = subprocess.run([sys.executable, str(PROJECT_ROOT / "main.py")], check=False)
     return int(run.returncode)
 
 
 def parse_args() -> argparse.Namespace:
+    """Parse CLI arguments for bootstrap setup actions."""
     parser = argparse.ArgumentParser(description="First-run setup for ARC desktop app")
     parser.add_argument(
         "--db",
@@ -89,6 +94,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> int:
+    """Execute bootstrap workflow and return shell exit code."""
     args = parse_args()
     db_path = Path(args.db)
 
@@ -102,7 +108,7 @@ def main() -> int:
     except subprocess.CalledProcessError as exc:
         print(f"[ARC] Command failed with exit code {exc.returncode}")
         return int(exc.returncode)
-    except Exception as exc:  # defensive top-level error boundary
+    except (ImportError, OSError, sqlite3.Error) as exc:
         print(f"[ARC] Setup failed: {exc}")
         return 1
 
