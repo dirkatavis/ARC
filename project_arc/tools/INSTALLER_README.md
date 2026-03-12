@@ -1,6 +1,6 @@
 # ARC Windows Installer Build
 
-This flow creates a customer-ready `setup.exe` for ARC.
+This flow creates a customer-ready `ARC_Setup.exe` for ARC.
 
 ## Prerequisites (builder machine)
 - Windows 10/11
@@ -15,7 +15,7 @@ powershell -ExecutionPolicy Bypass -File project_arc/tools/build_setup.ps1 -Vers
 ```
 
 ## Output artifact
-- `project_arc/dist/installer/setup.exe`
+- `project_arc/dist/installer/ARC_Setup.exe`
 
 ## End-user experience
 1. User runs `ARC_Setup.exe`
