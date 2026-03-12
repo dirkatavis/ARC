@@ -86,6 +86,29 @@ Important note:
 
 ---
 
+## 3.1) Build a Customer `setup.exe`
+
+For customer delivery, build a full installer package:
+
+1. Install Inno Setup 6 on the build machine (ensure `iscc.exe` is on `PATH`).
+2. From repo root, run:
+  - `powershell -ExecutionPolicy Bypass -File project_arc/tools/build_setup.ps1 -Version 1.0.0 -Clean`
+3. Deliver artifact:
+  - `project_arc/dist/installer/ARC_Setup.exe`
+
+Installer behavior for end users:
+- Installs ARC under local user programs folder (no admin required)
+- Creates Start Menu shortcut (desktop shortcut optional)
+- Leaves ARC ready to launch from Start Menu or desktop shortcut
+
+Runtime data location for installed app:
+- Database: `%LOCALAPPDATA%\ARC\data\arc_data.db`
+- Log file: `%LOCALAPPDATA%\ARC\error_log.txt`
+
+See `project_arc/tools/INSTALLER_README.md` for full packaging notes.
+
+---
+
 ## 4) Manual Setup and Run
 
 From repository root:

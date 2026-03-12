@@ -1,0 +1,75 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "ARC: Seed Sample Data",
+      "type": "shell",
+      "command": "${workspaceFolder}/.venv/Scripts/python.exe",
+      "args": [
+        "tools/seed_sample_data.py",
+        "--db",
+        "data/arc_data.db",
+        "--reset"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}/project_arc"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "ARC: Launch UI",
+      "type": "shell",
+      "command": "${workspaceFolder}/.venv/Scripts/python.exe",
+      "args": [
+        "main.py"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}/project_arc"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "ARC: Seed + Launch UI",
+      "dependsOn": [
+        "ARC: Seed Sample Data",
+        "ARC: Launch UI"
+      ],
+      "dependsOrder": "sequence"
+    },
+    {
+      "label": "ARC: Rebuild setup.exe (Clean)",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "project_arc/tools/build_setup.ps1",
+        "-Version",
+        "1.0.0",
+        "-Clean"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "ARC: Build setup.exe (Fast)",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "project_arc/tools/build_setup.ps1",
+        "-Version",
+        "1.0.0"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": []
+    }
+  ]
+}
