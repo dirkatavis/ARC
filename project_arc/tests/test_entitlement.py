@@ -115,7 +115,7 @@ def test_state_expires_after_trial_period() -> None:
     assert engine.get_state() == EntitlementState.EXPIRED
 
 
-def test_state_exactly_on_day_16_is_expired() -> None:
+def test_state_exactly_one_day_after_trial_is_expired() -> None:
     conn, engine = _make_engine()
     _backdate_install(conn, TRIAL_DAYS + 1)
     assert engine.get_state() == EntitlementState.EXPIRED

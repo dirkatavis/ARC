@@ -251,11 +251,11 @@ def _make_expired_service(connection: sqlite3.Connection) -> AttendanceService:
     """Build an AttendanceService wired to an expired entitlement engine."""
     from datetime import date, timedelta
 
-    from src.entitlement import EntitlementEngine
+    from src.entitlement import TRIAL_DAYS, EntitlementEngine
     from src.service import AttendanceService
 
     entitlement = EntitlementEngine(connection, machine_id="TRIAL-MACHINE-TEST")
-    past_date = (date.today() - timedelta(days=16)).isoformat()
+    past_date = (date.today() - timedelta(days=TRIAL_DAYS + 1)).isoformat()
     connection.execute(
         "UPDATE sys_entitlement SET install_date = ? WHERE id = 1",
         (past_date,),

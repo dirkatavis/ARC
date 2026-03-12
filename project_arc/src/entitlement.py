@@ -175,11 +175,9 @@ class EntitlementEngine:
         if row is None:
             return EntitlementState.EXPIRED
 
-        is_licensed = bool(row["is_licensed"] if isinstance(row, dict) else row[1])
-        license_key = row["license_key"] if isinstance(row, dict) else row[2]
-        install_date_str = row["install_date"] if isinstance(row, dict) else row[0]
+        install_date_str, is_licensed_int, license_key = row[0], row[1], row[2]
 
-        if is_licensed and license_key:
+        if is_licensed_int and license_key:
             # Security: re-validate key against current hardware on every boot.
             if verify_license_key(self._machine_id, str(license_key)):
                 return EntitlementState.LICENSED
@@ -203,10 +201,9 @@ class EntitlementEngine:
         ).fetchone()
         if row is None:
             return 0
-        is_licensed = bool(row["is_licensed"] if isinstance(row, dict) else row[1])
-        if is_licensed:
+        install_date_str, is_licensed_int = row[0], row[1]
+        if is_licensed_int:
             return TRIAL_DAYS  # licensed – show max
-        install_date_str = row["install_date"] if isinstance(row, dict) else row[0]
         try:
             install_date = date.fromisoformat(str(install_date_str))
         except ValueError:
