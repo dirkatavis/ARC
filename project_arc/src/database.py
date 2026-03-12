@@ -97,8 +97,8 @@ class DatabaseManager:
         if timestamp is None:
             cursor = self.connection.execute(
                 """
-                INSERT INTO call_outs (employee_id, recorded_by, notes)
-                VALUES (?, ?, ?)
+                INSERT INTO call_outs (employee_id, timestamp, recorded_by, notes)
+                VALUES (?, DATETIME('now', 'localtime'), ?, ?)
                 """,
                 (employee_id, recorded_by, notes),
             )

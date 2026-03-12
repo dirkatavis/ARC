@@ -1,0 +1,38 @@
+ARC Quick Start
+
+What you received
+- ARC_Setup.exe
+- ARC_Quick_Start.txt
+
+Install ARC
+1. Double-click ARC_Setup.exe.
+2. Click Next through the setup wizard.
+3. Keep the default install location unless IT tells you otherwise.
+4. Click Install.
+5. Click Finish.
+
+Install location
+- ARC installs to %LOCALAPPDATA%\Programs\ARC by default.
+- Launch ARC from the Start Menu shortcut.
+
+First launch
+- ARC creates its local database automatically.
+- No manual setup is required.
+
+Where ARC stores local files
+- Database: %LOCALAPPDATA%\ARC\data\arc_data.db
+- Error log: %LOCALAPPDATA%\ARC\error_log.txt
+
+If you have a problem
+1. Take a screenshot of the error.
+2. Send the screenshot to IT or the project contact.
+3. Include this file if it exists:
+   %LOCALAPPDATA%\ARC\error_log.txt
+
+Upgrade instructions
+- Close ARC.
+- Run the new ARC_Setup.exe.
+- Complete the wizard.
+
+Support
+- Contact your IT team or ARC project owner.

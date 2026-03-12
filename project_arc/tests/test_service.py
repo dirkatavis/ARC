@@ -7,6 +7,7 @@ All tests use in-memory SQLite fixtures to guarantee isolated execution.
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta
 import sqlite3
 from typing import Any
 
@@ -231,6 +232,33 @@ def test_log_call_out_honors_explicit_timestamp(arc_context: dict[str, Any]) -> 
 
     assert row is not None
     assert row["timestamp"] == expected_timestamp
+
+
+def test_log_call_out_uses_local_time_when_timestamp_not_provided(
+    arc_context: dict[str, Any],
+) -> None:
+    connection = arc_context["connection"]
+    service: AttendanceService = arc_context["service"]
+
+    seed_employee(connection, 3003, "Casey", "Lane")
+    before = datetime.now()
+    service.log_call_out(3003, recorded_by="ManagerQ", notes="Family care")
+    after = datetime.now()
+
+    row = connection.execute(
+        """
+        SELECT timestamp
+        FROM call_outs
+        WHERE employee_id = ?
+        ORDER BY id DESC
+        LIMIT 1
+        """,
+        (3003,),
+    ).fetchone()
+
+    assert row is not None
+    logged_at = datetime.strptime(row["timestamp"], "%Y-%m-%d %H:%M:%S")
+    assert (before - timedelta(seconds=1)) <= logged_at <= (after + timedelta(seconds=1))
 
 
 def test_log_call_out_raises_database_access_error_on_sqlite_failure(arc_context: dict[str, Any]) -> None:

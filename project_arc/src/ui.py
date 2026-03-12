@@ -9,6 +9,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 import sqlite3
+import sys
 import tkinter as tk
 from tkinter import messagebox
 
@@ -43,10 +44,15 @@ SAVE_BUTTON_HEIGHT = 40
 class ArcApp(ctk.CTk):
     """Main ARC application window."""
 
-    def __init__(self, service: AttendanceService, session_manager: str | None = None) -> None:
+    def __init__(
+        self,
+        service: AttendanceService,
+        session_manager: str | None = None,
+        error_log_path: Path | None = None,
+    ) -> None:
         super().__init__()
         self.service = service
-        self.error_log_path = Path(__file__).resolve().parents[1] / "error_log.txt"
+        self.error_log_path = error_log_path or _resolve_default_log_path()
         self.current_employee_id: int | None = None
         self.current_employee_name: str = ""
         self.session_manager: str | None = session_manager
@@ -672,12 +678,13 @@ class ArcApp(ctk.CTk):
 
 def build_default_service() -> AttendanceService:
     """Build a file-backed service for desktop runtime usage."""
-    project_root = Path(__file__).resolve().parents[1]
-    data_dir = project_root / "data"
-    data_dir.mkdir(parents=True, exist_ok=True)
-
     override_path = os.getenv("ARC_DB_PATH")
-    db_path = Path(override_path) if override_path else data_dir / "arc_data.db"
+    if override_path:
+        db_path = Path(override_path)
+    else:
+        db_path = _resolve_default_db_path()
+
+    db_path.parent.mkdir(parents=True, exist_ok=True)
     connection = sqlite3.connect(db_path)
     connection.row_factory = sqlite3.Row
 
@@ -686,12 +693,35 @@ def build_default_service() -> AttendanceService:
     return AttendanceService(db_manager)
 
 
+def _resolve_app_storage_root() -> Path:
+    """Resolve writable root directory for ARC runtime files."""
+    if getattr(sys, "frozen", False):
+        local_appdata = os.getenv("LOCALAPPDATA")
+        if local_appdata:
+            return Path(local_appdata) / "ARC"
+        return Path.home() / "AppData" / "Local" / "ARC"
+
+    return Path(__file__).resolve().parents[1]
+
+
+def _resolve_default_db_path() -> Path:
+    """Return default database path for source and packaged runtime modes."""
+    return _resolve_app_storage_root() / "data" / "arc_data.db"
+
+
+def _resolve_default_log_path() -> Path:
+    """Return default runtime error log path."""
+    return _resolve_app_storage_root() / "error_log.txt"
+
+
 def run_ui() -> None:
     """Launch the ARC desktop UI."""
+    log_path = _resolve_default_log_path()
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+
     try:
         service = build_default_service()
     except sqlite3.Error as exc:
-        log_path = Path(__file__).resolve().parents[1] / "error_log.txt"
         append_error_log(log_path, "build_default_service", exc)
         messagebox.showerror(
             "Startup Error",
@@ -699,5 +729,5 @@ def run_ui() -> None:
         )
         return
 
-    app = ArcApp(service)
+    app = ArcApp(service, error_log_path=log_path)
     app.mainloop()
