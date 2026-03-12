@@ -1,7 +1,7 @@
 """CustomTkinter UI for ARC.
 
 This module provides employee search, read-only history review, verified
-call-out logging, and dedicated reporting navigation.
+call-out logging, dedicated reporting navigation, and license management.
 """
 
 from __future__ import annotations
@@ -15,8 +15,9 @@ from tkinter import messagebox
 import customtkinter as ctk
 
 from src.database import DatabaseManager
+from src.entitlement import EntitlementEngine, EntitlementState
 from src.error_logging import append_error_log
-from src.service import AttendanceService, DatabaseAccessError, DuplicateEmployeeError
+from src.service import AttendanceService, DatabaseAccessError, DuplicateEmployeeError, TrialExpiredError
 from src.ui_controller import UiController
 
 
@@ -43,9 +44,15 @@ SAVE_BUTTON_HEIGHT = 40
 class ArcApp(ctk.CTk):
     """Main ARC application window."""
 
-    def __init__(self, service: AttendanceService, session_manager: str | None = None) -> None:
+    def __init__(
+        self,
+        service: AttendanceService,
+        session_manager: str | None = None,
+        entitlement: EntitlementEngine | None = None,
+    ) -> None:
         super().__init__()
         self.service = service
+        self.entitlement = entitlement
         self.error_log_path = Path(__file__).resolve().parents[1] / "error_log.txt"
         self.current_employee_id: int | None = None
         self.current_employee_name: str = ""
@@ -76,6 +83,10 @@ class ArcApp(ctk.CTk):
         else:
             self.after(50, self._show_sign_in_modal)
 
+        # Show the trial-expired blocking modal after the main window is ready.
+        if self.entitlement is not None:
+            self.after(100, self._check_entitlement_on_startup)
+
     def _build_navigation(self) -> None:
         nav = ctk.CTkFrame(self)
         nav.grid(row=0, column=0, sticky="ew", padx=16, pady=(16, 8))
@@ -99,6 +110,204 @@ class ArcApp(ctk.CTk):
             font=ctk.CTkFont(size=12),
         )
         self.session_header_label.grid(row=0, column=2, sticky="e", padx=(8, 12), pady=10)
+
+        # Trial / license status banner (column 3).
+        self.trial_banner_label = ctk.CTkLabel(
+            nav,
+            text="",
+            anchor="e",
+            font=ctk.CTkFont(size=12, weight="bold"),
+        )
+        self.trial_banner_label.grid(row=0, column=3, sticky="e", padx=(4, 4), pady=10)
+
+        activate_btn = ctk.CTkButton(
+            nav,
+            text="Activate License",
+            width=130,
+            height=28,
+            command=self._open_license_modal,
+            fg_color=("gray70", "gray30"),
+            hover_color=("gray60", "gray40"),
+            corner_radius=6,
+            font=ctk.CTkFont(size=12),
+        )
+        activate_btn.grid(row=0, column=4, sticky="e", padx=(4, 12), pady=10)
+
+        self._refresh_trial_banner()
+
+    # ── Entitlement helpers ────────────────────────────────────────────────
+
+    def _get_entitlement_state(self) -> EntitlementState | None:
+        if self.entitlement is None:
+            return None
+        return self.entitlement.get_state()
+
+    def _refresh_trial_banner(self) -> None:
+        """Update the trial status banner in the navigation bar."""
+        if self.entitlement is None:
+            self.trial_banner_label.configure(text="")
+            return
+
+        state = self.entitlement.get_state()
+        if state == EntitlementState.LICENSED:
+            self.trial_banner_label.configure(
+                text="✓ Licensed",
+                text_color=("#16A34A", "#4ade80"),
+            )
+        elif state == EntitlementState.TRIAL:
+            days = self.entitlement.days_remaining()
+            self.trial_banner_label.configure(
+                text=f"🔓 Trial – {days} day{'s' if days != 1 else ''} remaining",
+                text_color=("#d97706", "#fbbf24"),
+            )
+        else:  # EXPIRED
+            self.trial_banner_label.configure(
+                text="⛔ Trial Expired",
+                text_color=("#EF4444", "#EF4444"),
+            )
+
+    def _check_entitlement_on_startup(self) -> None:
+        """Show the trial-expired modal on startup if the license has lapsed."""
+        if self.entitlement is None:
+            return
+        if self.entitlement.get_state() == EntitlementState.EXPIRED:
+            self._show_trial_expired_modal()
+
+    def _show_trial_expired_modal(self) -> None:
+        """Block the main window and present activation options."""
+        modal = ctk.CTkToplevel(self)
+        modal.title("Trial Expired")
+        modal.geometry("460x240")
+        modal.grab_set()
+        modal.resizable(False, False)
+        modal.protocol("WM_DELETE_WINDOW", lambda: None)
+
+        ctk.CTkLabel(
+            modal,
+            text="Your 15-day trial has expired.",
+            font=ctk.CTkFont(size=16, weight="bold"),
+            anchor="w",
+        ).pack(fill="x", padx=20, pady=(20, 6))
+
+        ctk.CTkLabel(
+            modal,
+            text=(
+                "ARC is now in read-only mode. Purchase a license and\n"
+                "enter your activation key to restore full access."
+            ),
+            anchor="w",
+            justify="left",
+        ).pack(fill="x", padx=20, pady=(0, 16))
+
+        def open_activation() -> None:
+            modal.destroy()
+            self._open_license_modal()
+
+        ctk.CTkButton(
+            modal,
+            text="Activate License…",
+            command=open_activation,
+            fg_color=("#2563eb", "#1d4ed8"),
+            hover_color=("#1d4ed8", "#1e40af"),
+        ).pack(fill="x", padx=20, pady=(0, 8))
+
+        ctk.CTkButton(
+            modal,
+            text="Continue in Read-Only Mode",
+            command=modal.destroy,
+            fg_color=("gray70", "gray30"),
+            hover_color=("gray60", "gray40"),
+        ).pack(fill="x", padx=20, pady=(0, 20))
+
+    def _open_license_modal(self) -> None:
+        """Open the License Management dialog."""
+        machine_id = self.entitlement.machine_id if self.entitlement else "N/A"
+
+        modal = ctk.CTkToplevel(self)
+        modal.title("License Management")
+        modal.geometry("500x340")
+        modal.grab_set()
+        modal.resizable(False, False)
+
+        ctk.CTkLabel(
+            modal,
+            text="License Activation",
+            font=ctk.CTkFont(size=16, weight="bold"),
+            anchor="w",
+        ).pack(fill="x", padx=20, pady=(20, 4))
+
+        # Machine ID section.
+        ctk.CTkLabel(modal, text="Machine ID (share this with the developer to get a key):", anchor="w").pack(
+            fill="x", padx=20, pady=(10, 2)
+        )
+        mid_row = ctk.CTkFrame(modal, fg_color="transparent")
+        mid_row.pack(fill="x", padx=20, pady=(0, 14))
+        mid_row.grid_columnconfigure(0, weight=1)
+
+        mid_entry = ctk.CTkEntry(mid_row, width=340)
+        mid_entry.grid(row=0, column=0, sticky="ew", padx=(0, 8))
+        mid_entry.insert(0, machine_id)
+        mid_entry.configure(state="disabled")
+
+        def copy_machine_id() -> None:
+            self.clipboard_clear()
+            self.clipboard_append(machine_id)
+            copy_btn.configure(text="Copied!")
+            self.after(1500, lambda: copy_btn.configure(text="Copy"))
+
+        copy_btn = ctk.CTkButton(mid_row, text="Copy", width=80, command=copy_machine_id)
+        copy_btn.grid(row=0, column=1)
+
+        # Key entry section.
+        ctk.CTkLabel(modal, text="* Activation Key (format: XXXX-XXXX-XXXX):", anchor="w").pack(
+            fill="x", padx=20, pady=(0, 2)
+        )
+        key_entry = ctk.CTkEntry(modal, placeholder_text="e.g. A1B2-C3D4-E5F6", width=340)
+        key_entry.pack(fill="x", padx=20, pady=(0, 6))
+
+        feedback_label = ctk.CTkLabel(modal, text="", anchor="w")
+        feedback_label.pack(fill="x", padx=20, pady=(0, 10))
+
+        def attempt_activation() -> None:
+            if self.entitlement is None:
+                feedback_label.configure(
+                    text="No entitlement engine configured.",
+                    text_color=("#EF4444", "#EF4444"),
+                )
+                return
+
+            key = key_entry.get().strip()
+            if not key:
+                feedback_label.configure(
+                    text="Please enter an activation key.",
+                    text_color=("#EF4444", "#EF4444"),
+                )
+                return
+
+            if self.entitlement.activate(key):
+                feedback_label.configure(
+                    text="✓ Activation successful! ARC is now fully licensed.",
+                    text_color=("#16A34A", "#4ade80"),
+                )
+                self._refresh_trial_banner()
+                self._update_save_button_state()
+                activate_btn.configure(state="disabled")
+            else:
+                feedback_label.configure(
+                    text="Invalid Key. Please verify and try again.",
+                    text_color=("#EF4444", "#EF4444"),
+                )
+
+        activate_btn = ctk.CTkButton(
+            modal,
+            text="Activate",
+            command=attempt_activation,
+            fg_color=("#2563eb", "#1d4ed8"),
+            hover_color=("#1d4ed8", "#1e40af"),
+        )
+        activate_btn.pack(fill="x", padx=20, pady=(0, 16))
+
+        key_entry.bind("<Return>", lambda _e: attempt_activation())
 
     def _build_case_entry_view(self) -> None:
         self.case_entry_frame = ctk.CTkFrame(self)
@@ -543,6 +752,12 @@ class ArcApp(ctk.CTk):
                 return
             try:
                 self.service.add_employee(employee_id, first, last)
+            except TrialExpiredError:
+                messagebox.showerror(
+                    "License Required",
+                    "Your trial has expired. Please activate a license to add employees.",
+                )
+                return
             except DuplicateEmployeeError:
                 messagebox.showerror("Duplicate", "Employee ID already exists.")
                 return
@@ -565,6 +780,16 @@ class ArcApp(ctk.CTk):
         )
 
     def _update_save_button_state(self) -> None:
+        # Block writes when the trial has expired.
+        state = self._get_entitlement_state()
+        if state == EntitlementState.EXPIRED:
+            self.save_button.configure(state="disabled")
+            self.save_hint_label.configure(
+                text="Trial expired. Activate a license to record call-outs."
+            )
+            self.recorded_by_hint_label.configure(text="", text_color=("#64748b", "#94a3b8"))
+            return
+
         can_save = UiController.can_enable_save(
             current_employee_id=self.current_employee_id,
             recorded_by=self.recorded_by_entry.get(),
@@ -626,6 +851,14 @@ class ArcApp(ctk.CTk):
                     recorded_by=recorded_by,
                     notes=notes,
                 )
+            except TrialExpiredError:
+                modal.destroy()
+                messagebox.showerror(
+                    "License Required",
+                    "Your trial has expired. Please activate a license to record call-outs.",
+                )
+                self._update_save_button_state()
+                return
             except DatabaseAccessError as exc:
                 self._handle_runtime_error(
                     "Could not save call-out because the database file is currently inaccessible.",
@@ -683,7 +916,9 @@ def build_default_service() -> AttendanceService:
 
     db_manager = DatabaseManager(connection)
     db_manager.initialize_schema()
-    return AttendanceService(db_manager)
+
+    entitlement = EntitlementEngine(connection)
+    return AttendanceService(db_manager, entitlement=entitlement)
 
 
 def run_ui() -> None:
@@ -699,5 +934,5 @@ def run_ui() -> None:
         )
         return
 
-    app = ArcApp(service)
+    app = ArcApp(service, entitlement=service.entitlement)
     app.mainloop()
