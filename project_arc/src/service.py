@@ -39,6 +39,15 @@ class AttendanceService:
         self.db_manager = db_manager
         self.entitlement = entitlement
         self.points_config = points_config or PointsConfig()
+
+    def synchronize_points_from_history(self) -> None:
+        """Recalculate points from history when writes are allowed."""
+        if self.entitlement is not None:
+            from src.entitlement import EntitlementState  # noqa: PLC0415
+
+            if self.entitlement.get_state() == EntitlementState.EXPIRED:
+                return
+
         self.db_manager.recalculate_all_employee_points(self.points_config.callouts_per_point)
 
     def _assert_write_allowed(self) -> None:

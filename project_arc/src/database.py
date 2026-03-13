@@ -102,6 +102,17 @@ class DatabaseManager:
         timestamp: str | None = None,
     ) -> int:
         """Insert call-out, update totals, and persist award history."""
+        employee_row = self.connection.execute(
+            """
+            SELECT total_callouts, total_points
+            FROM employees
+            WHERE employee_id = ?
+            """,
+            (employee_id,),
+        ).fetchone()
+        current_callouts = int(employee_row["total_callouts"]) if employee_row is not None else 0
+        current_points = int(employee_row["total_points"]) if employee_row is not None else 0
+
         if timestamp is None:
             cursor = self.connection.execute(
                 """
@@ -126,20 +137,8 @@ class DatabaseManager:
         ).fetchone()
         awarded_at = str(row["timestamp"]) if row else ""
 
-        summary_row = self.connection.execute(
-            """
-            SELECT
-                COUNT(*) AS total_callouts,
-                COALESCE(MAX(e.total_points), 0) AS current_points
-            FROM call_outs c
-            JOIN employees e ON e.employee_id = c.employee_id
-            WHERE c.employee_id = ?
-            """,
-            (employee_id,),
-        ).fetchone()
-        total_callouts = int(summary_row["total_callouts"])
-        current_points = int(summary_row["current_points"])
-        new_total_points = calculate_points(total_callouts, callouts_per_point)
+        new_total_callouts = current_callouts + 1
+        new_total_points = calculate_points(new_total_callouts, callouts_per_point)
 
         self.connection.execute(
             """
@@ -147,7 +146,7 @@ class DatabaseManager:
             SET total_callouts = ?, total_points = ?, points_last_updated = ?
             WHERE employee_id = ?
             """,
-            (total_callouts, new_total_points, awarded_at, employee_id),
+            (new_total_callouts, new_total_points, awarded_at, employee_id),
         )
 
         events = build_incremental_award_events(
@@ -182,19 +181,22 @@ class DatabaseManager:
 
         for employee_row in employee_rows:
             employee_id = int(employee_row["employee_id"])
-            callouts = self.connection.execute(
+            summary_row = self.connection.execute(
                 """
-                SELECT timestamp
+                SELECT COUNT(*) AS total_callouts, MAX(timestamp) AS last_updated
                 FROM call_outs
                 WHERE employee_id = ?
-                ORDER BY timestamp ASC, id ASC
                 """,
                 (employee_id,),
-            ).fetchall()
+            ).fetchone()
 
-            total_callouts = len(callouts)
+            total_callouts = int(summary_row["total_callouts"]) if summary_row is not None else 0
             total_points = calculate_points(total_callouts, callouts_per_point)
-            last_updated = str(callouts[-1]["timestamp"]) if callouts else None
+            last_updated = (
+                str(summary_row["last_updated"])
+                if summary_row is not None and summary_row["last_updated"] is not None
+                else None
+            )
 
             self.connection.execute(
                 """
@@ -212,7 +214,19 @@ class DatabaseManager:
 
             for point_number in range(1, total_points + 1):
                 threshold_callouts = point_number * callouts_per_point
-                award_timestamp = str(callouts[threshold_callouts - 1]["timestamp"])
+                award_row = self.connection.execute(
+                    """
+                    SELECT timestamp
+                    FROM call_outs
+                    WHERE employee_id = ?
+                    ORDER BY timestamp ASC, id ASC
+                    LIMIT 1 OFFSET ?
+                    """,
+                    (employee_id, threshold_callouts - 1),
+                ).fetchone()
+                if award_row is None:
+                    continue
+                award_timestamp = str(award_row["timestamp"])
                 self.connection.execute(
                     """
                     INSERT INTO points_awards

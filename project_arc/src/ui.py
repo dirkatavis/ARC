@@ -55,6 +55,7 @@ REPORT_SORT_LABEL_TO_KEY = {
 REPORT_SORT_KEY_TO_LABEL = {value: key for key, value in REPORT_SORT_LABEL_TO_KEY.items()}
 REPORT_SORT_ASC_SYMBOL = " ▲"
 REPORT_SORT_DESC_SYMBOL = " ▼"
+REPORT_FILTER_DEBOUNCE_MS = 250
 
 
 class ArcApp(ctk.CTk):
@@ -78,6 +79,7 @@ class ArcApp(ctk.CTk):
         self.match_map: dict[str, int] = {}
         self._suppress_match_selection = False
         self._trial_notice_shown = False
+        self._report_filter_after_id: str | None = None
 
         ctk.set_appearance_mode("system")
         ctk.set_default_color_theme("blue")
@@ -547,7 +549,7 @@ class ArcApp(ctk.CTk):
         ctk.CTkLabel(controls, text="Filter Name").grid(row=0, column=0, sticky="w", padx=(10, 6), pady=10)
         self.report_filter_entry = ctk.CTkEntry(controls, width=REPORT_FILTER_WIDTH, placeholder_text="Type employee name")
         self.report_filter_entry.grid(row=0, column=1, sticky="w", padx=(0, 8), pady=10)
-        self.report_filter_entry.bind("<KeyRelease>", lambda _event: self._refresh_points_report())
+        self.report_filter_entry.bind("<KeyRelease>", lambda _event: self._schedule_points_report_refresh())
 
         ctk.CTkLabel(controls, text="Sort By").grid(row=0, column=2, sticky="w", padx=(8, 6), pady=10)
         self.report_sort_by = ctk.CTkOptionMenu(
@@ -824,6 +826,18 @@ class ArcApp(ctk.CTk):
                     row["last_updated"] or "",
                 ),
             )
+
+    def _run_debounced_points_report_refresh(self) -> None:
+        self._report_filter_after_id = None
+        self._refresh_points_report()
+
+    def _schedule_points_report_refresh(self) -> None:
+        if self._report_filter_after_id is not None:
+            self.after_cancel(self._report_filter_after_id)
+        self._report_filter_after_id = self.after(
+            REPORT_FILTER_DEBOUNCE_MS,
+            self._run_debounced_points_report_refresh,
+        )
 
     def _load_employee(self, employee_id: int) -> None:
         try:
@@ -1104,7 +1118,9 @@ def build_default_service() -> AttendanceService:
     points_config = load_points_config(config_path)
 
     entitlement = EntitlementEngine(connection)
-    return AttendanceService(db_manager, entitlement=entitlement, points_config=points_config)
+    service = AttendanceService(db_manager, entitlement=entitlement, points_config=points_config)
+    service.synchronize_points_from_history()
+    return service
 
 
 def _resolve_app_storage_root() -> Path:
@@ -1152,6 +1168,13 @@ def run_ui() -> None:
         messagebox.showerror(
             "Configuration Error",
             "ARC configuration is invalid. Please update config.ini and restart.",
+        )
+        return
+    except OSError as exc:
+        append_error_log(log_path, "build_default_service", exc)
+        messagebox.showerror(
+            "Startup Error",
+            "ARC could not read or create runtime files. Please check permissions and try again.",
         )
         return
 
