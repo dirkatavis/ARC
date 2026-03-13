@@ -7,14 +7,14 @@ All tests use in-memory SQLite fixtures to guarantee isolated execution.
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 import sqlite3
 from typing import Any
 
 import pytest
 
 from src.database import DatabaseManager
-from src.service import AttendanceService, DatabaseAccessError, DuplicateEmployeeError
+from src.service import AttendanceService, DatabaseAccessError, DuplicateEmployeeError, TrialExpiredError
 
 SCHEMA_SQL = """
 CREATE TABLE employees (
@@ -279,10 +279,7 @@ def test_log_call_out_raises_database_access_error_on_sqlite_failure(arc_context
 
 def _make_expired_service(connection: sqlite3.Connection) -> AttendanceService:
     """Build an AttendanceService wired to an expired entitlement engine."""
-    from datetime import date, timedelta
-
     from src.entitlement import TRIAL_DAYS, EntitlementEngine
-    from src.service import AttendanceService
 
     entitlement = EntitlementEngine(connection, machine_id="TRIAL-MACHINE-TEST")
     past_date = (date.today() - timedelta(days=TRIAL_DAYS + 1)).isoformat()
@@ -297,8 +294,6 @@ def _make_expired_service(connection: sqlite3.Connection) -> AttendanceService:
 
 
 def test_expired_trial_blocks_add_employee() -> None:
-    from src.service import TrialExpiredError
-
     conn = sqlite3.connect(":memory:")
     conn.row_factory = sqlite3.Row
     conn.executescript(SCHEMA_SQL)
@@ -311,8 +306,6 @@ def test_expired_trial_blocks_add_employee() -> None:
 
 
 def test_expired_trial_blocks_log_call_out() -> None:
-    from src.service import TrialExpiredError
-
     conn = sqlite3.connect(":memory:")
     conn.row_factory = sqlite3.Row
     conn.executescript(SCHEMA_SQL)

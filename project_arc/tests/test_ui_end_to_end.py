@@ -9,6 +9,7 @@ xfail tests to keep forward progress visible in TDD.
 
 from __future__ import annotations
 
+from datetime import date, timedelta
 import os
 import sqlite3
 from pathlib import Path
@@ -18,6 +19,7 @@ import pytest
 from tkinter import messagebox
 
 from src.database import DatabaseManager
+from src.entitlement import EntitlementEngine
 from src.service import AttendanceService, DatabaseAccessError
 from src.ui import ArcApp
 
@@ -514,6 +516,37 @@ def app_with_session(monkeypatch, tmp_path: Path):
     connection.close()
 
 
+@pytest.fixture
+def app_with_trial(monkeypatch, tmp_path: Path):
+    """App fixture configured with trial entitlement and session sign-in skipped."""
+    db_path = tmp_path / "arc_trial_e2e.db"
+    connection = sqlite3.connect(db_path)
+    connection.row_factory = sqlite3.Row
+
+    db = DatabaseManager(connection)
+    db.initialize_schema()
+
+    entitlement = EntitlementEngine(connection, machine_id="TRIAL-UI-TEST")
+    trial_start = (date.today() - timedelta(days=3)).isoformat()
+    connection.execute("UPDATE sys_entitlement SET install_date = ? WHERE id = 1", (trial_start,))
+    connection.commit()
+
+    service = AttendanceService(db, entitlement=entitlement)
+    service.add_employee(1001, "Ari", "Cole")
+
+    monkeypatch.setattr(messagebox, "showerror", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(messagebox, "askyesno", lambda *_args, **_kwargs: False)
+
+    app = ArcApp(service, session_manager="TrialUser", entitlement=entitlement)
+    app.withdraw()
+    app.update_idletasks()
+
+    yield app, connection, service, entitlement
+
+    app.destroy()
+    connection.close()
+
+
 def test_session_manager_autofills_recorded_by(ui_gate, app_with_session) -> None:
     app, _connection, _service = app_with_session
 
@@ -655,4 +688,58 @@ def test_history_constrained_to_max_entries(ui_gate, app_with_db) -> None:
     # (plus an optional header line about showing N most recent)
     assert "Mgr14" in history_text   # most recent is present
     assert "Mgr0 " not in history_text  # oldest excluded (space avoids matching "Mgr0x")
+
+
+def test_trial_banner_displays_days_remaining(ui_gate, app_with_trial) -> None:
+    app, _connection, _service, entitlement = app_with_trial
+
+    expected_days = entitlement.days_remaining()
+    banner_text = app.trial_banner_label.cget("text")
+
+    assert "Trial" in banner_text
+    assert str(expected_days) in banner_text
+    assert "remaining" in banner_text
+
+
+def test_trial_startup_modal_communicates_full_access(ui_gate, app_with_trial) -> None:
+    app, _connection, _service, _entitlement = app_with_trial
+
+    app._check_entitlement_on_startup()
+    app.update_idletasks()
+    modals = _find_toplevels(app)
+    trial_modal = next((modal for modal in modals if modal.title() == "Trial Active"), None)
+
+    assert trial_modal is not None
+    label_texts = _collect_label_text(trial_modal)
+    joined = "\n".join(label_texts)
+    assert "Trial" in joined
+    assert "All features are currently enabled" in joined
+
+    continue_button = _find_button_by_text(trial_modal, "Continue")
+    assert continue_button is not None
+    continue_button.invoke()
+
+
+def test_trial_mode_still_allows_save_flow(ui_gate, app_with_trial) -> None:
+    app, connection, _service, _entitlement = app_with_trial
+
+    app.search_entry.delete(0, "end")
+    app.search_entry.insert(0, "1001")
+    app._handle_lookup()
+    app.recorded_by_entry.configure(state="normal")
+    app.recorded_by_entry.delete(0, "end")
+    app.recorded_by_entry.insert(0, "TrialManager")
+    app._update_save_button_state()
+
+    before = connection.execute("SELECT COUNT(*) FROM call_outs").fetchone()[0]
+    app._open_verification_modal()
+
+    verify_modal = next(m for m in _find_toplevels(app) if m.title() == "Verify Call-Out")
+    confirm_btn = _find_button_by_text(verify_modal, "Confirm")
+    assert confirm_btn is not None
+    confirm_btn.invoke()
+    app.update_idletasks()
+
+    after = connection.execute("SELECT COUNT(*) FROM call_outs").fetchone()[0]
+    assert after == before + 1
 

@@ -62,6 +62,7 @@ class ArcApp(ctk.CTk):
         self.current_view = tk.StringVar(value="Case Entry")
         self.match_map: dict[str, int] = {}
         self._suppress_match_selection = False
+        self._trial_notice_shown = False
 
         ctk.set_appearance_mode("system")
         ctk.set_default_color_theme("blue")
@@ -169,11 +170,62 @@ class ArcApp(ctk.CTk):
             )
 
     def _check_entitlement_on_startup(self) -> None:
-        """Show the trial-expired modal on startup if the license has lapsed."""
+        """Show entitlement state messaging at startup."""
         if self.entitlement is None:
             return
-        if self.entitlement.get_state() == EntitlementState.EXPIRED:
+
+        state = self.entitlement.get_state()
+        if state == EntitlementState.EXPIRED:
             self._show_trial_expired_modal()
+        elif state == EntitlementState.TRIAL and not self._trial_notice_shown:
+            self._trial_notice_shown = True
+            self._show_trial_active_modal()
+
+    def _show_trial_active_modal(self) -> None:
+        """Inform users they are in trial mode while allowing full access."""
+        if self.entitlement is None:
+            return
+
+        days = self.entitlement.days_remaining()
+
+        modal = ctk.CTkToplevel(self)
+        modal.title("Trial Active")
+        modal.geometry("500x250")
+        modal.grab_set()
+        modal.resizable(False, False)
+
+        ctk.CTkLabel(
+            modal,
+            text="ARC Trial Mode",
+            font=ctk.CTkFont(size=16, weight="bold"),
+            anchor="w",
+        ).pack(fill="x", padx=20, pady=(20, 6))
+
+        ctk.CTkLabel(
+            modal,
+            text=(
+                f"You have {days} day{'s' if days != 1 else ''} remaining in your trial.\n"
+                "All features are currently enabled during the trial period."
+            ),
+            anchor="w",
+            justify="left",
+        ).pack(fill="x", padx=20, pady=(0, 16))
+
+        ctk.CTkButton(
+            modal,
+            text="Continue",
+            command=modal.destroy,
+            fg_color=("#2563eb", "#1d4ed8"),
+            hover_color=("#1d4ed8", "#1e40af"),
+        ).pack(fill="x", padx=20, pady=(0, 8))
+
+        ctk.CTkButton(
+            modal,
+            text="Activate License…",
+            command=lambda: (modal.destroy(), self._open_license_modal()),
+            fg_color=("gray70", "gray30"),
+            hover_color=("gray60", "gray40"),
+        ).pack(fill="x", padx=20, pady=(0, 20))
 
     def _show_trial_expired_modal(self) -> None:
         """Block the main window and present activation options."""
