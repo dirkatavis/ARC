@@ -8,7 +8,9 @@ from __future__ import annotations
 
 import sqlite3
 from pathlib import Path
+from tkinter import messagebox
 
+import src.ui as ui_module
 from src.ui import build_default_service
 
 
@@ -80,3 +82,22 @@ def test_build_default_service_supports_call_out_persistence(
     assert row[1] == "Shift conflict"
 
     conn.close()
+
+
+def test_run_ui_handles_filesystem_error_during_startup(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    errors: list[tuple[str, str]] = []
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+    monkeypatch.setattr(
+        ui_module,
+        "build_default_service",
+        lambda: (_ for _ in ()).throw(OSError("access denied")),
+    )
+    monkeypatch.setattr(messagebox, "showerror", lambda title, msg: errors.append((title, msg)))
+
+    ui_module.run_ui()
+
+    assert errors
+    assert errors[-1][0] == "Startup Error"

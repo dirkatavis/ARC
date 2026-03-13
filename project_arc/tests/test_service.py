@@ -14,13 +14,17 @@ from typing import Any
 import pytest
 
 from src.database import DatabaseManager
+from src.points_config import PointsConfig
 from src.service import AttendanceService, DatabaseAccessError, DuplicateEmployeeError, TrialExpiredError
 
 SCHEMA_SQL = """
 CREATE TABLE employees (
     employee_id INTEGER PRIMARY KEY,
     first_name TEXT NOT NULL,
-    last_name TEXT NOT NULL
+    last_name TEXT NOT NULL,
+    total_callouts INTEGER NOT NULL DEFAULT 0,
+    total_points INTEGER NOT NULL DEFAULT 0,
+    points_last_updated TEXT
 );
 
 CREATE TABLE call_outs (
@@ -30,6 +34,16 @@ CREATE TABLE call_outs (
     recorded_by TEXT NOT NULL,
     notes TEXT,
     FOREIGN KEY (employee_id) REFERENCES employees(employee_id)
+);
+
+CREATE TABLE points_awards (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    employee_id INTEGER NOT NULL,
+    awarded_point_number INTEGER NOT NULL,
+    callout_count_at_award INTEGER NOT NULL,
+    awarded_at TEXT NOT NULL,
+    FOREIGN KEY (employee_id) REFERENCES employees(employee_id),
+    UNIQUE (employee_id, awarded_point_number)
 );
 """
 
@@ -265,7 +279,7 @@ def test_log_call_out_raises_database_access_error_on_sqlite_failure(arc_context
     service: AttendanceService = arc_context["service"]
 
     class FailingDb:
-        def insert_call_out(self, **_kwargs: Any) -> int:
+        def log_call_out_with_points(self, **_kwargs: Any) -> int:
             raise sqlite3.OperationalError("database is locked")
 
     service.db_manager = FailingDb()  # type: ignore[assignment]
@@ -347,3 +361,81 @@ def test_no_entitlement_engine_allows_all_writes(arc_context: dict[str, Any]) ->
     # Must not raise – backward-compatible with existing test infrastructure.
     service.add_employee(8001, "Free", "Write")
     service.log_call_out(8001, recorded_by="AnyMgr", notes="no entitlement guard")
+
+
+def test_synchronize_points_from_history_updates_totals_when_writes_allowed() -> None:
+    conn = sqlite3.connect(":memory:")
+    conn.row_factory = sqlite3.Row
+    conn.executescript(SCHEMA_SQL)
+
+    conn.execute(
+        "INSERT INTO employees (employee_id, first_name, last_name) VALUES (9101, 'Sync', 'Ready')"
+    )
+    conn.execute(
+        "INSERT INTO call_outs (employee_id, timestamp, recorded_by, notes) VALUES (9101, '2026-03-01 08:00:00', 'Mgr', 'A')"
+    )
+    conn.execute(
+        "INSERT INTO call_outs (employee_id, timestamp, recorded_by, notes) VALUES (9101, '2026-03-02 08:00:00', 'Mgr', 'B')"
+    )
+    conn.execute(
+        "INSERT INTO call_outs (employee_id, timestamp, recorded_by, notes) VALUES (9101, '2026-03-03 08:00:00', 'Mgr', 'C')"
+    )
+    conn.commit()
+
+    service = AttendanceService(
+        DatabaseManager(conn),
+        points_config=PointsConfig(callouts_per_point=3),
+    )
+    service.synchronize_points_from_history()
+
+    row = conn.execute(
+        "SELECT total_callouts, total_points FROM employees WHERE employee_id = 9101"
+    ).fetchone()
+    assert row is not None
+    assert row["total_callouts"] == 3
+    assert row["total_points"] == 1
+
+    conn.close()
+
+
+def test_synchronize_points_from_history_skips_when_trial_expired() -> None:
+    conn = sqlite3.connect(":memory:")
+    conn.row_factory = sqlite3.Row
+    conn.executescript(SCHEMA_SQL)
+
+    conn.execute(
+        "INSERT INTO employees (employee_id, first_name, last_name) VALUES (9201, 'Expired', 'Trial')"
+    )
+    conn.execute(
+        "INSERT INTO call_outs (employee_id, timestamp, recorded_by, notes) VALUES (9201, '2026-03-01 08:00:00', 'Mgr', 'A')"
+    )
+    conn.execute(
+        "INSERT INTO call_outs (employee_id, timestamp, recorded_by, notes) VALUES (9201, '2026-03-02 08:00:00', 'Mgr', 'B')"
+    )
+    conn.execute(
+        "INSERT INTO call_outs (employee_id, timestamp, recorded_by, notes) VALUES (9201, '2026-03-03 08:00:00', 'Mgr', 'C')"
+    )
+    conn.commit()
+
+    from src.entitlement import TRIAL_DAYS, EntitlementEngine
+
+    entitlement = EntitlementEngine(conn, machine_id="TRIAL-MACHINE-SYNC")
+    past_date = (date.today() - timedelta(days=TRIAL_DAYS + 1)).isoformat()
+    conn.execute("UPDATE sys_entitlement SET install_date = ? WHERE id = 1", (past_date,))
+    conn.commit()
+
+    service = AttendanceService(
+        DatabaseManager(conn),
+        entitlement=entitlement,
+        points_config=PointsConfig(callouts_per_point=3),
+    )
+    service.synchronize_points_from_history()
+
+    row = conn.execute(
+        "SELECT total_callouts, total_points FROM employees WHERE employee_id = 9201"
+    ).fetchone()
+    assert row is not None
+    assert row["total_callouts"] == 0
+    assert row["total_points"] == 0
+
+    conn.close()

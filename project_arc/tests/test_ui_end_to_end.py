@@ -281,9 +281,11 @@ def test_report_refresh_after_commit_and_status_feedback(ui_gate, app_with_db) -
     app.update_idletasks()
 
     app._handle_view_change("Reporting")
-    report_text = app.top10_box.get("1.0", "end")
-    assert "1001" in report_text
-    assert "Call-Out Count" in report_text
+    rows = [app.points_report_tree.item(item_id, "values") for item_id in app.points_report_tree.get_children()]
+    employee_row = next(row for row in rows if str(row[1]) == "1001")
+    assert employee_row[0] == "Ari Cole"
+    assert str(employee_row[2]) == "1"
+    assert str(employee_row[3]) == "0"
     assert app.status_label.cget("text") == "Status: Call-out saved"
     assert "Ari Cole" in app.employee_label.cget("text")
     assert app.recorded_by_entry.get().strip() == ""
