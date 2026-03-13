@@ -155,6 +155,14 @@ def test_licensed_state_bypasses_date_check() -> None:
     assert engine.get_state() == EntitlementState.LICENSED
 
 
+def test_days_remaining_is_zero_when_licensed() -> None:
+    machine_id = "LICENSE-MACHINE-005"
+    _conn, engine = _make_engine(machine_id=machine_id)
+    key = generate_license_key(machine_id)
+    engine.activate(key)
+    assert engine.days_remaining() == 0
+
+
 def test_activate_from_expired_state_transitions_to_licensed() -> None:
     machine_id = "LICENSE-MACHINE-004"
     conn, engine = _make_engine(machine_id=machine_id)

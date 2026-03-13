@@ -36,23 +36,13 @@ def import_employee_roster(db_manager: DatabaseManager, csv_path: Path) -> dict[
             employee_id = int(employee_id_raw)
             existing = db_manager.fetch_employee(employee_id)
 
-            db_manager.connection.execute(
-                """
-                INSERT INTO employees (employee_id, first_name, last_name)
-                VALUES (?, ?, ?)
-                ON CONFLICT(employee_id) DO UPDATE SET
-                    first_name = excluded.first_name,
-                    last_name = excluded.last_name
-                """,
-                (employee_id, first_name, last_name),
-            )
+            db_manager.upsert_employee(employee_id, first_name, last_name)
 
             if existing is None:
                 inserted += 1
             else:
                 updated += 1
 
-    db_manager.connection.commit()
     return {
         "inserted": inserted,
         "updated": updated,

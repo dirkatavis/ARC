@@ -203,7 +203,7 @@ class EntitlementEngine:
             return 0
         install_date_str, is_licensed_int = row[0], row[1]
         if is_licensed_int:
-            return TRIAL_DAYS  # licensed – show max
+            return 0
         try:
             install_date = date.fromisoformat(str(install_date_str))
         except ValueError:

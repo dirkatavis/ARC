@@ -14,6 +14,7 @@ class DatabaseManager:
     """Wraps SQLite operations for employees and call-out data."""
 
     def __init__(self, connection: sqlite3.Connection) -> None:
+        connection.row_factory = sqlite3.Row
         self.connection = connection
 
     def initialize_schema(self) -> None:
@@ -34,6 +35,9 @@ class DatabaseManager:
                 notes TEXT,
                 FOREIGN KEY (employee_id) REFERENCES employees(employee_id)
             );
+
+            CREATE INDEX IF NOT EXISTS idx_call_outs_employee_id
+            ON call_outs(employee_id);
             """
         )
         self.connection.commit()
@@ -42,6 +46,20 @@ class DatabaseManager:
         """Insert a new employee record."""
         self.connection.execute(
             "INSERT INTO employees (employee_id, first_name, last_name) VALUES (?, ?, ?)",
+            (employee_id, first_name, last_name),
+        )
+        self.connection.commit()
+
+    def upsert_employee(self, employee_id: int, first_name: str, last_name: str) -> None:
+        """Insert or update an employee by employee_id."""
+        self.connection.execute(
+            """
+            INSERT INTO employees (employee_id, first_name, last_name)
+            VALUES (?, ?, ?)
+            ON CONFLICT(employee_id) DO UPDATE SET
+                first_name = excluded.first_name,
+                last_name = excluded.last_name
+            """,
             (employee_id, first_name, last_name),
         )
         self.connection.commit()

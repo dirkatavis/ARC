@@ -1,0 +1,36 @@
+"""Focused tests for DatabaseManager infrastructure behavior."""
+
+from __future__ import annotations
+
+import sqlite3
+
+from src.database import DatabaseManager
+
+
+def test_database_manager_enforces_row_factory() -> None:
+    connection = sqlite3.connect(":memory:")
+    assert connection.row_factory is None
+
+    db = DatabaseManager(connection)
+    assert connection.row_factory == sqlite3.Row
+
+    db.initialize_schema()
+    db.insert_employee(1001, "Ari", "Cole")
+    employee = db.fetch_employee(1001)
+
+    assert employee is not None
+    assert employee["first_name"] == "Ari"
+    connection.close()
+
+
+def test_initialize_schema_creates_callouts_employee_index() -> None:
+    connection = sqlite3.connect(":memory:")
+    db = DatabaseManager(connection)
+
+    db.initialize_schema()
+
+    row = connection.execute(
+        "SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'idx_call_outs_employee_id'"
+    ).fetchone()
+    assert row is not None
+    connection.close()
