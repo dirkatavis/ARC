@@ -21,38 +21,34 @@ def import_employee_roster(db_manager: DatabaseManager, csv_path: Path) -> dict[
     updated = 0
     skipped = 0
 
-    with csv_path.open("r", encoding="utf-8", newline="") as handle:
-        reader = csv.DictReader(handle)
+    with db_manager.connection:
+        with csv_path.open("r", encoding="utf-8", newline="") as handle:
+            reader = csv.DictReader(handle)
 
-        for row in reader:
-            employee_id_raw = (row.get("employee_id") or "").strip()
-            first_name = (row.get("first_name") or "").strip()
-            last_name = (row.get("last_name") or "").strip()
+            for row in reader:
+                employee_id_raw = (row.get("employee_id") or "").strip()
+                first_name = (row.get("first_name") or "").strip()
+                last_name = (row.get("last_name") or "").strip()
 
-            if not employee_id_raw.isdigit() or not first_name or not last_name:
-                skipped += 1
-                continue
+                if not employee_id_raw.isdigit() or not first_name or not last_name:
+                    skipped += 1
+                    continue
 
-            employee_id = int(employee_id_raw)
-            existing = db_manager.fetch_employee(employee_id)
+                employee_id = int(employee_id_raw)
+                existing = db_manager.fetch_employee(employee_id)
 
-            db_manager.connection.execute(
-                """
-                INSERT INTO employees (employee_id, first_name, last_name)
-                VALUES (?, ?, ?)
-                ON CONFLICT(employee_id) DO UPDATE SET
-                    first_name = excluded.first_name,
-                    last_name = excluded.last_name
-                """,
-                (employee_id, first_name, last_name),
-            )
+                db_manager.upsert_employee(
+                    employee_id,
+                    first_name,
+                    last_name,
+                    commit=False,
+                )
 
-            if existing is None:
-                inserted += 1
-            else:
-                updated += 1
+                if existing is None:
+                    inserted += 1
+                else:
+                    updated += 1
 
-    db_manager.connection.commit()
     return {
         "inserted": inserted,
         "updated": updated,

@@ -13,6 +13,7 @@ import sys
 import tkinter as tk
 from tkinter import messagebox
 from tkinter import ttk
+from typing import Callable
 
 import customtkinter as ctk
 
@@ -29,6 +30,7 @@ VIEW_SELECTOR_WIDTH = 180
 SEARCH_ROW_WIDTH = 560
 SEARCH_ENTRY_WIDTH = 260
 SEARCH_BUTTON_WIDTH = 120
+CLEAR_BUTTON_WIDTH = 100
 CONTEXT_PANE_WIDTH = 620
 ACTION_PANE_WIDTH = 360
 DETAILS_PANEL_WIDTH = 420
@@ -67,11 +69,13 @@ class ArcApp(ctk.CTk):
         session_manager: str | None = None,
         entitlement: EntitlementEngine | None = None,
         error_log_path: Path | None = None,
+        on_close: Callable[[], None] | None = None,
     ) -> None:
         super().__init__()
         self.service = service
         self.entitlement = entitlement
         self.error_log_path = error_log_path or _resolve_default_log_path()
+        self.on_close = on_close
         self.current_employee_id: int | None = None
         self.current_employee_name: str = ""
         self.session_manager: str | None = session_manager
@@ -97,6 +101,7 @@ class ArcApp(ctk.CTk):
         self._build_status_bar()
         self._handle_view_change("Case Entry")
         self._set_status("Ready")
+        self.protocol("WM_DELETE_WINDOW", self._handle_app_close)
 
         if session_manager is not None:
             self._apply_session_manager()
@@ -418,6 +423,16 @@ class ArcApp(ctk.CTk):
         )
         self.search_button.grid(row=0, column=2, padx=(8, 12), pady=12)
 
+        self.clear_button = ctk.CTkButton(
+            search_row,
+            text="Clear",
+            command=self._reset_case_entry,
+            width=CLEAR_BUTTON_WIDTH,
+            fg_color=("gray70", "gray30"),
+            hover_color=("gray60", "gray40"),
+        )
+        self.clear_button.grid(row=0, column=3, padx=(0, 12), pady=12)
+
         self.match_selector = ctk.CTkOptionMenu(
             self.context_pane,
             values=["No matches"],
@@ -679,11 +694,21 @@ class ArcApp(ctk.CTk):
         self.after(1500, self._restore_save_button)
 
     def _restore_save_button(self) -> None:
+        if self.save_button.cget("state") == "disabled":
+            return
         self.save_button.configure(
             text="Record Call-Out",
             fg_color=("#2563eb", "#1d4ed8"),
             hover_color=("#1d4ed8", "#1e40af"),
         )
+
+    def _handle_app_close(self) -> None:
+        if self.on_close is not None:
+            try:
+                self.on_close()
+            except sqlite3.Error as exc:
+                append_error_log(self.error_log_path, "app_close", exc)
+        self.destroy()
 
     def _handle_runtime_error(self, user_message: str, context: str, exc: Exception) -> None:
         append_error_log(self.error_log_path, context, exc)
@@ -722,7 +747,7 @@ class ArcApp(ctk.CTk):
         modal.geometry("380x185")
         modal.grab_set()
         modal.resizable(False, False)
-        modal.protocol("WM_DELETE_WINDOW", lambda: None)
+        modal.protocol("WM_DELETE_WINDOW", self._handle_app_close)
 
         ctk.CTkLabel(modal, text="Sign in to begin your session:", anchor="w").pack(
             fill="x", padx=16, pady=(16, 8)
@@ -771,6 +796,28 @@ class ArcApp(ctk.CTk):
             self.change_session_button.configure(text="(Change)")
             self.session_header_label.configure(text=f"Signed in as: {self.session_manager}")
             self._update_save_button_state()
+
+    def _reset_case_entry(self) -> None:
+        self.search_entry.delete(0, "end")
+        self.match_map = {}
+        self.match_selector.grid_remove()
+        self.match_cards_frame.grid_remove()
+        self._clear_match_cards()
+        self.current_employee_id = None
+        self.current_employee_name = ""
+        self.employee_label.configure(text="None")
+        self._update_history_text("NONE")
+        self.notes_box.delete("1.0", "end")
+
+        if self.session_manager:
+            self._apply_session_manager()
+        else:
+            self.recorded_by_entry.configure(state="normal")
+            self.recorded_by_entry.delete(0, "end")
+
+        self._update_action_zero_state()
+        self._update_save_button_state()
+        self._set_status("Entry form reset")
 
     def _update_action_zero_state(self) -> None:
         if self.current_employee_id is None:
@@ -983,6 +1030,8 @@ class ArcApp(ctk.CTk):
         ctk.CTkButton(modal, text="Save Employee", command=save_new_employee).pack(
             fill="x", padx=16, pady=(0, 16)
         )
+        first_name_entry.bind("<Return>", lambda _event: save_new_employee())
+        last_name_entry.bind("<Return>", lambda _event: save_new_employee())
 
     def _update_save_button_state(self) -> None:
         # Block writes when the trial has expired.
@@ -1050,11 +1099,12 @@ class ArcApp(ctk.CTk):
         button_row.grid_columnconfigure((0, 1), weight=1)
 
         def confirm_save() -> None:
+            current_notes = self.notes_box.get("1.0", "end").strip()
             try:
                 self.service.log_call_out(
                     self.current_employee_id,
                     recorded_by=recorded_by,
-                    notes=notes,
+                    notes=current_notes,
                 )
             except TrialExpiredError:
                 modal.destroy()
@@ -1178,5 +1228,10 @@ def run_ui() -> None:
         )
         return
 
-    app = ArcApp(service, entitlement=service.entitlement, error_log_path=log_path)
+    app = ArcApp(
+        service,
+        entitlement=service.entitlement,
+        error_log_path=log_path,
+        on_close=service.db_manager.connection.close,
+    )
     app.mainloop()

@@ -142,6 +142,50 @@ def test_add_new_employee_does_not_log_call_out(ui_gate, app_with_db, monkeypatc
     assert call_out_count == 0
 
 
+def test_add_new_employee_modal_enter_key_submits(ui_gate, app_with_db, monkeypatch) -> None:
+    app, connection, _service = app_with_db
+
+    monkeypatch.setattr(messagebox, "askyesno", lambda *_args, **_kwargs: True)
+
+    app.search_entry.delete(0, "end")
+    app.search_entry.insert(0, "3001")
+    app._handle_lookup()
+
+    modal = next(modal for modal in _find_toplevels(app) if modal.title() == "Add New Employee")
+    entries = _find_entries(modal)
+    assert len(entries) >= 2
+
+    entries[0].insert(0, "Jamie")
+    entries[1].insert(0, "Lane")
+    entries[1].event_generate("<Return>")
+    app.update_idletasks()
+
+    row = connection.execute(
+        "SELECT employee_id, first_name, last_name FROM employees WHERE employee_id = ?",
+        (3001,),
+    ).fetchone()
+    assert row is not None
+    assert row[1] == "Jamie"
+    assert row[2] == "Lane"
+
+
+def test_clear_button_resets_case_entry_state(ui_gate, app_with_db) -> None:
+    app, _connection, _service = app_with_db
+
+    app.search_entry.delete(0, "end")
+    app.search_entry.insert(0, "1001")
+    app._handle_lookup()
+    app.recorded_by_entry.insert(0, "ManagerX")
+    app.notes_box.insert("1.0", "Need reset")
+    app.clear_button.invoke()
+
+    assert app.search_entry.get() == ""
+    assert app.employee_label.cget("text") == "None"
+    assert app.notes_box.get("1.0", "end").strip() == ""
+    assert app.history_box.get("1.0", "end").strip() == "NONE"
+    assert app.status_label.cget("text") == "Status: Entry form reset"
+
+
 def test_verification_modal_trigger_blocks_write_until_confirm(ui_gate, app_with_db) -> None:
     app, connection, _service = app_with_db
 
