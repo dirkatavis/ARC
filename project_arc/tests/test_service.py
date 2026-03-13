@@ -20,7 +20,10 @@ SCHEMA_SQL = """
 CREATE TABLE employees (
     employee_id INTEGER PRIMARY KEY,
     first_name TEXT NOT NULL,
-    last_name TEXT NOT NULL
+    last_name TEXT NOT NULL,
+    total_callouts INTEGER NOT NULL DEFAULT 0,
+    total_points INTEGER NOT NULL DEFAULT 0,
+    points_last_updated TEXT
 );
 
 CREATE TABLE call_outs (
@@ -30,6 +33,16 @@ CREATE TABLE call_outs (
     recorded_by TEXT NOT NULL,
     notes TEXT,
     FOREIGN KEY (employee_id) REFERENCES employees(employee_id)
+);
+
+CREATE TABLE points_awards (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    employee_id INTEGER NOT NULL,
+    awarded_point_number INTEGER NOT NULL,
+    callout_count_at_award INTEGER NOT NULL,
+    awarded_at TEXT NOT NULL,
+    FOREIGN KEY (employee_id) REFERENCES employees(employee_id),
+    UNIQUE (employee_id, awarded_point_number)
 );
 """
 
@@ -265,7 +278,7 @@ def test_log_call_out_raises_database_access_error_on_sqlite_failure(arc_context
     service: AttendanceService = arc_context["service"]
 
     class FailingDb:
-        def insert_call_out(self, **_kwargs: Any) -> int:
+        def log_call_out_with_points(self, **_kwargs: Any) -> int:
             raise sqlite3.OperationalError("database is locked")
 
     service.db_manager = FailingDb()  # type: ignore[assignment]

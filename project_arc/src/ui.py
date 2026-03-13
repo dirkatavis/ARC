@@ -12,12 +12,15 @@ import sqlite3
 import sys
 import tkinter as tk
 from tkinter import messagebox
+from tkinter import ttk
 
 import customtkinter as ctk
 
 from src.database import DatabaseManager
 from src.entitlement import EntitlementEngine, EntitlementState
 from src.error_logging import append_error_log
+from src.points_config import ensure_config_file, load_points_config
+from src.points_engine import PointsConfigError
 from src.service import AttendanceService, DatabaseAccessError, DuplicateEmployeeError, TrialExpiredError
 from src.ui_controller import UiController
 
@@ -40,6 +43,18 @@ NOTES_BOX_HEIGHT = 90
 NOTES_FONT_FAMILY = "Courier New"
 NOTES_FONT_SIZE = 13
 SAVE_BUTTON_HEIGHT = 40
+REPORT_FILTER_WIDTH = 260
+REPORT_SORT_WIDTH = 180
+REPORT_SORT_LABEL_TO_KEY = {
+    "Employee Name": "employee_name",
+    "Employee ID": "employee_id",
+    "Total Callouts": "total_callouts",
+    "Points Earned": "points_earned",
+    "Last Updated": "last_updated",
+}
+REPORT_SORT_KEY_TO_LABEL = {value: key for key, value in REPORT_SORT_LABEL_TO_KEY.items()}
+REPORT_SORT_ASC_SYMBOL = " ▲"
+REPORT_SORT_DESC_SYMBOL = " ▼"
 
 
 class ArcApp(ctk.CTk):
@@ -520,19 +535,111 @@ class ArcApp(ctk.CTk):
 
         title = ctk.CTkLabel(
             self.reporting_frame,
-            text="Top 10 High-Frequency",
+            text="Employee Points Report",
             font=ctk.CTkFont(size=22, weight="bold"),
         )
         title.grid(row=0, column=0, sticky="w", padx=16, pady=(16, 6))
 
-        refresh = ctk.CTkButton(self.reporting_frame, text="Refresh Report", command=self._render_top_10)
-        refresh.grid(row=1, column=0, sticky="ew", padx=16, pady=(0, 10))
+        controls = ctk.CTkFrame(self.reporting_frame)
+        controls.grid(row=1, column=0, sticky="ew", padx=16, pady=(0, 10))
+        controls.grid_columnconfigure(6, weight=1)
 
-        self.top10_box = ctk.CTkTextbox(self.reporting_frame)
-        self.top10_box.grid(row=2, column=0, sticky="nsew", padx=16, pady=(0, 10))
-        self.top10_box.configure(state="disabled")
+        ctk.CTkLabel(controls, text="Filter Name").grid(row=0, column=0, sticky="w", padx=(10, 6), pady=10)
+        self.report_filter_entry = ctk.CTkEntry(controls, width=REPORT_FILTER_WIDTH, placeholder_text="Type employee name")
+        self.report_filter_entry.grid(row=0, column=1, sticky="w", padx=(0, 8), pady=10)
+        self.report_filter_entry.bind("<KeyRelease>", lambda _event: self._refresh_points_report())
 
-        self._render_top_10()
+        ctk.CTkLabel(controls, text="Sort By").grid(row=0, column=2, sticky="w", padx=(8, 6), pady=10)
+        self.report_sort_by = ctk.CTkOptionMenu(
+            controls,
+            values=["Employee Name", "Employee ID", "Total Callouts", "Points Earned", "Last Updated"],
+            width=REPORT_SORT_WIDTH,
+            command=lambda _value: self._refresh_points_report(),
+        )
+        self.report_sort_by.grid(row=0, column=3, sticky="w", padx=(0, 8), pady=10)
+        self.report_sort_by.set("Employee Name")
+
+        self.report_sort_direction = ctk.CTkOptionMenu(
+            controls,
+            values=["Ascending", "Descending"],
+            width=130,
+            command=lambda _value: self._refresh_points_report(),
+        )
+        self.report_sort_direction.grid(row=0, column=4, sticky="w", padx=(0, 8), pady=10)
+        self.report_sort_direction.set("Ascending")
+
+        refresh = ctk.CTkButton(controls, text="Refresh", command=self._refresh_points_report)
+        refresh.grid(row=0, column=5, sticky="w", padx=(0, 10), pady=10)
+
+        table_frame = ctk.CTkFrame(self.reporting_frame)
+        table_frame.grid(row=2, column=0, sticky="nsew", padx=16, pady=(0, 10))
+        table_frame.grid_columnconfigure(0, weight=1)
+        table_frame.grid_rowconfigure(0, weight=1)
+
+        columns = ("employee_name", "employee_id", "total_callouts", "points_earned", "last_updated")
+        self.points_report_tree = ttk.Treeview(table_frame, columns=columns, show="headings")
+        self._update_report_header_indicators()
+        self.points_report_tree.column("employee_name", width=240, anchor="w")
+        self.points_report_tree.column("employee_id", width=120, anchor="center")
+        self.points_report_tree.column("total_callouts", width=140, anchor="center")
+        self.points_report_tree.column("points_earned", width=120, anchor="center")
+        self.points_report_tree.column("last_updated", width=180, anchor="center")
+        self.points_report_tree.grid(row=0, column=0, sticky="nsew")
+
+        scroll = ttk.Scrollbar(table_frame, orient="vertical", command=self.points_report_tree.yview)
+        scroll.grid(row=0, column=1, sticky="ns")
+        self.points_report_tree.configure(yscrollcommand=scroll.set)
+
+        self._refresh_points_report()
+
+    def _handle_report_header_click(self, sort_key: str) -> None:
+        selected_label = REPORT_SORT_KEY_TO_LABEL.get(sort_key, "Employee Name")
+        current_label = self.report_sort_by.get()
+        current_direction = self.report_sort_direction.get()
+
+        if current_label == selected_label:
+            next_direction = "Descending" if current_direction == "Ascending" else "Ascending"
+            self.report_sort_direction.set(next_direction)
+        else:
+            self.report_sort_by.set(selected_label)
+            self.report_sort_direction.set("Ascending")
+
+        self._refresh_points_report()
+
+    def _update_report_header_indicators(self) -> None:
+        sort_key = REPORT_SORT_LABEL_TO_KEY.get(self.report_sort_by.get(), "employee_name")
+        is_desc = self.report_sort_direction.get() == "Descending"
+
+        def header_text(label: str, column_key: str) -> str:
+            if sort_key != column_key:
+                return label
+            return label + (REPORT_SORT_DESC_SYMBOL if is_desc else REPORT_SORT_ASC_SYMBOL)
+
+        self.points_report_tree.heading(
+            "employee_name",
+            text=header_text("Employee Name", "employee_name"),
+            command=lambda: self._handle_report_header_click("employee_name"),
+        )
+        self.points_report_tree.heading(
+            "employee_id",
+            text=header_text("Employee ID", "employee_id"),
+            command=lambda: self._handle_report_header_click("employee_id"),
+        )
+        self.points_report_tree.heading(
+            "total_callouts",
+            text=header_text("Total Callouts", "total_callouts"),
+            command=lambda: self._handle_report_header_click("total_callouts"),
+        )
+        self.points_report_tree.heading(
+            "points_earned",
+            text=header_text("Points Earned", "points_earned"),
+            command=lambda: self._handle_report_header_click("points_earned"),
+        )
+        self.points_report_tree.heading(
+            "last_updated",
+            text=header_text("Last Updated", "last_updated"),
+            command=lambda: self._handle_report_header_click("last_updated"),
+        )
 
     def _build_status_bar(self) -> None:
         status_frame = ctk.CTkFrame(self)
@@ -552,7 +659,7 @@ class ArcApp(ctk.CTk):
         if view_name == "Reporting":
             self.case_entry_frame.grid_remove()
             self.reporting_frame.grid()
-            self._render_top_10()
+            self._refresh_points_report()
         else:
             self.reporting_frame.grid_remove()
             self.case_entry_frame.grid()
@@ -682,11 +789,41 @@ class ArcApp(ctk.CTk):
 
         return normalized_query in {employee_id, first_name, last_name, full_name}
 
-    def _update_top10_text(self, text: str) -> None:
-        self.top10_box.configure(state="normal")
-        self.top10_box.delete("1.0", "end")
-        self.top10_box.insert("1.0", text)
-        self.top10_box.configure(state="disabled")
+    def _refresh_points_report(self) -> None:
+        sort_by = REPORT_SORT_LABEL_TO_KEY.get(self.report_sort_by.get(), "employee_name")
+        sort_desc = self.report_sort_direction.get() == "Descending"
+        name_filter = self.report_filter_entry.get()
+        self._update_report_header_indicators()
+
+        try:
+            rows = self.service.get_employee_points_report(
+                sort_by=sort_by,
+                sort_desc=sort_desc,
+                name_filter=name_filter,
+            )
+        except DatabaseAccessError as exc:
+            self._handle_runtime_error(
+                "Unable to load report because the database is unavailable.",
+                "get_employee_points_report",
+                exc,
+            )
+            rows = []
+
+        for item_id in self.points_report_tree.get_children():
+            self.points_report_tree.delete(item_id)
+
+        for row in rows:
+            self.points_report_tree.insert(
+                "",
+                "end",
+                values=(
+                    row["employee_name"],
+                    row["employee_id"],
+                    row["total_callouts"],
+                    row["points_earned"],
+                    row["last_updated"] or "",
+                ),
+            )
 
     def _load_employee(self, employee_id: int) -> None:
         try:
@@ -928,7 +1065,7 @@ class ArcApp(ctk.CTk):
             self.recorded_by_entry.delete(0, "end")
             self.notes_box.delete("1.0", "end")
             self._handle_lookup()
-            self._render_top_10()
+            self._refresh_points_report()
             if self.session_manager:
                 self._apply_session_manager()
             else:
@@ -942,20 +1079,6 @@ class ArcApp(ctk.CTk):
         ctk.CTkButton(button_row, text="Cancel", command=modal.destroy).grid(
             row=0, column=1, sticky="ew", padx=(8, 0), pady=8
         )
-
-    def _render_top_10(self) -> None:
-        try:
-            rows = self.service.get_top_10_high_frequency()
-        except DatabaseAccessError as exc:
-            self._handle_runtime_error(
-                "Unable to load report because the database is unavailable.",
-                "get_top_10_high_frequency",
-                exc,
-            )
-            self._update_top10_text("Report unavailable while database is inaccessible.")
-            return
-        self._update_top10_text(UiController.format_top_10(rows))
-
 
 def build_default_service() -> AttendanceService:
     """Build a file-backed service for desktop runtime usage."""
@@ -972,8 +1095,16 @@ def build_default_service() -> AttendanceService:
     db_manager = DatabaseManager(connection)
     db_manager.initialize_schema()
 
+    override_config_path = os.getenv("ARC_CONFIG_PATH")
+    if override_config_path:
+        config_path = Path(override_config_path)
+    else:
+        config_path = _resolve_default_config_path()
+    ensure_config_file(config_path)
+    points_config = load_points_config(config_path)
+
     entitlement = EntitlementEngine(connection)
-    return AttendanceService(db_manager, entitlement=entitlement)
+    return AttendanceService(db_manager, entitlement=entitlement, points_config=points_config)
 
 
 def _resolve_app_storage_root() -> Path:
@@ -990,6 +1121,11 @@ def _resolve_app_storage_root() -> Path:
 def _resolve_default_db_path() -> Path:
     """Return default database path for source and packaged runtime modes."""
     return _resolve_app_storage_root() / "data" / "arc_data.db"
+
+
+def _resolve_default_config_path() -> Path:
+    """Return default runtime config path."""
+    return _resolve_app_storage_root() / "config.ini"
 
 
 def _resolve_default_log_path() -> Path:
@@ -1009,6 +1145,13 @@ def run_ui() -> None:
         messagebox.showerror(
             "Startup Error",
             "ARC could not open the database file. Please check permissions and try again.",
+        )
+        return
+    except PointsConfigError as exc:
+        append_error_log(log_path, "load_points_config", exc)
+        messagebox.showerror(
+            "Configuration Error",
+            "ARC configuration is invalid. Please update config.ini and restart.",
         )
         return
 
