@@ -6,9 +6,12 @@ The implementation is intentionally deferred so tests define behavior first.
 from __future__ import annotations
 
 import sqlite3
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from src.database import DatabaseManager
+
+if TYPE_CHECKING:
+    from src.entitlement import EntitlementEngine
 
 
 class DuplicateEmployeeError(Exception):
@@ -19,14 +22,36 @@ class DatabaseAccessError(Exception):
     """Raised when the backing SQLite database is unavailable."""
 
 
+class TrialExpiredError(Exception):
+    """Raised when a write operation is attempted after the trial period has ended."""
+
+
 class AttendanceService:
     """Coordinates ARC business rules between UI and database layers."""
 
-    def __init__(self, db_manager: DatabaseManager) -> None:
+    def __init__(
+        self,
+        db_manager: DatabaseManager,
+        entitlement: EntitlementEngine | None = None,
+    ) -> None:
         self.db_manager = db_manager
+        self.entitlement = entitlement
+
+    def _assert_write_allowed(self) -> None:
+        """Raise TrialExpiredError if the entitlement state blocks writes."""
+        if self.entitlement is None:
+            return
+        from src.entitlement import EntitlementState  # noqa: PLC0415
+
+        state = self.entitlement.get_state()
+        if state == EntitlementState.EXPIRED:
+            raise TrialExpiredError(
+                "The trial period has expired. Please activate a license to continue."
+            )
 
     def add_employee(self, employee_id: int, first_name: str, last_name: str) -> None:
         """Create an employee record after business validation."""
+        self._assert_write_allowed()
         try:
             self.db_manager.insert_employee(employee_id, first_name, last_name)
         except sqlite3.IntegrityError as exc:
@@ -65,6 +90,7 @@ class AttendanceService:
         timestamp: str | None = None,
     ) -> int:
         """Log a call-out event and return inserted call-out id."""
+        self._assert_write_allowed()
         if not recorded_by or not recorded_by.strip():
             raise ValueError("recorded_by is required")
 

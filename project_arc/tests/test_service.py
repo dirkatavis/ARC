@@ -7,14 +7,14 @@ All tests use in-memory SQLite fixtures to guarantee isolated execution.
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 import sqlite3
 from typing import Any
 
 import pytest
 
 from src.database import DatabaseManager
-from src.service import AttendanceService, DatabaseAccessError, DuplicateEmployeeError
+from src.service import AttendanceService, DatabaseAccessError, DuplicateEmployeeError, TrialExpiredError
 
 SCHEMA_SQL = """
 CREATE TABLE employees (
@@ -272,3 +272,78 @@ def test_log_call_out_raises_database_access_error_on_sqlite_failure(arc_context
 
     with pytest.raises(DatabaseAccessError, match="unavailable"):
         service.log_call_out(1001, recorded_by="ManagerZ", notes="test")
+
+
+# ── Entitlement-aware write protection ─────────────────────────────────────
+
+
+def _make_expired_service(connection: sqlite3.Connection) -> AttendanceService:
+    """Build an AttendanceService wired to an expired entitlement engine."""
+    from src.entitlement import TRIAL_DAYS, EntitlementEngine
+
+    entitlement = EntitlementEngine(connection, machine_id="TRIAL-MACHINE-TEST")
+    past_date = (date.today() - timedelta(days=TRIAL_DAYS + 1)).isoformat()
+    connection.execute(
+        "UPDATE sys_entitlement SET install_date = ? WHERE id = 1",
+        (past_date,),
+    )
+    connection.commit()
+
+    db_manager = DatabaseManager(connection)
+    return AttendanceService(db_manager, entitlement=entitlement)
+
+
+def test_expired_trial_blocks_add_employee() -> None:
+    conn = sqlite3.connect(":memory:")
+    conn.row_factory = sqlite3.Row
+    conn.executescript(SCHEMA_SQL)
+
+    service = _make_expired_service(conn)
+    with pytest.raises(TrialExpiredError):
+        service.add_employee(9001, "Blocked", "User")
+
+    conn.close()
+
+
+def test_expired_trial_blocks_log_call_out() -> None:
+    conn = sqlite3.connect(":memory:")
+    conn.row_factory = sqlite3.Row
+    conn.executescript(SCHEMA_SQL)
+
+    service = _make_expired_service(conn)
+    with pytest.raises(TrialExpiredError):
+        service.log_call_out(9001, recorded_by="ManagerX", notes="blocked")
+
+    conn.close()
+
+
+def test_expired_trial_still_allows_reads() -> None:
+    """Read-only operations must succeed even when the trial is expired."""
+    conn = sqlite3.connect(":memory:")
+    conn.row_factory = sqlite3.Row
+    conn.executescript(SCHEMA_SQL)
+
+    # Insert an employee directly so lookup is possible without going through service writes.
+    conn.execute("INSERT INTO employees (employee_id, first_name, last_name) VALUES (9002, 'Read', 'Only')")
+    conn.commit()
+
+    service = _make_expired_service(conn)
+
+    # search and top-10 must not raise
+    result = service.search_employees("Read")
+    assert len(result) == 1
+
+    top10 = service.get_top_10_high_frequency()
+    assert isinstance(top10, list)
+
+    conn.close()
+
+
+def test_no_entitlement_engine_allows_all_writes(arc_context: dict[str, Any]) -> None:
+    """AttendanceService without an entitlement engine must behave as before."""
+    service: AttendanceService = arc_context["service"]
+    assert service.entitlement is None
+
+    # Must not raise – backward-compatible with existing test infrastructure.
+    service.add_employee(8001, "Free", "Write")
+    service.log_call_out(8001, recorded_by="AnyMgr", notes="no entitlement guard")

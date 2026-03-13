@@ -13,9 +13,13 @@ ARC must capture the following data:
 1. Manager searches by employee criteria.
 2. ARC displays employee history in read-only form.
 3. If history is empty, ARC explicitly displays `NONE`.
-4. Manager enters `Recorded By` and Notes, then toggles call-out checkbox.
+4. Manager enters `Recorded By` and Notes.
 5. ARC displays mandatory verification summary modal before commit.
 6. On confirm, ARC writes call-out and resets intake fields.
+
+## 2.1 Trial and Licensing Workflow
+- During active trial, ARC remains fully functional and visibly indicates trial status.
+- If trial expires, ARC shifts to read-only mode until a valid license is activated.
 
 ## 3. Search Requirements
 - Search must support:

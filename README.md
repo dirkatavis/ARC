@@ -1,4 +1,4 @@
-# ARC (Attendance Recording Center)
+# ARC (Attendance Reporting Console)
 
 ARC is a desktop application for managing employee call-out tracking and basic attendance-related reporting.
 
@@ -92,7 +92,7 @@ For customer delivery, build a full installer package:
 
 1. Install Inno Setup 6 on the build machine (ensure `iscc.exe` is on `PATH`).
 2. From repo root, run:
-  - `powershell -ExecutionPolicy Bypass -File project_arc/tools/build_setup.ps1 -Version 1.0.0 -Clean`
+  - `powershell -ExecutionPolicy Bypass -File project_arc/tools/build_setup.ps1 -Version 1.1.0 -Clean`
 3. Deliver artifact:
   - `project_arc/dist/installer/ARC_Setup.exe`
 
@@ -200,6 +200,11 @@ This behavior is covered by UI tests for:
 Status label uses semantic coloring:
 - Green for normal/success informational messages
 - Red for error/exception states
+
+### Trial and licensing behavior
+- During TRIAL, ARC remains fully functional and displays trial status (days remaining) in the top navigation banner.
+- On startup during TRIAL, ARC shows a non-blocking informational dialog indicating full functionality is enabled during the trial period.
+- During EXPIRED state, write operations are blocked (read-only mode) until valid license activation.
 
 ### History box behavior
 History display is read-only and supports vertical scrolling when content exceeds visible area.

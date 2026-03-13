@@ -72,6 +72,41 @@ If Windows SmartScreen or another security prompt appears:
 
 The installer is designed to support upgrades without requiring the user to manually remove the previous version first.
 
+## License Activation
+
+ARC includes a 15-day free trial. All features are fully available during the trial period.
+
+### Trial Status
+
+The trial countdown appears as colored text in the top navigation bar of the ARC window:
+- **Orange text** – trial is active; shows days remaining
+- **Red text** – trial has expired; write operations are blocked
+- **Green text** – fully licensed
+
+### How to Activate
+
+1. Open ARC.
+2. Click **Activate License** in the top navigation bar (visible at all times).
+3. In the License Management dialog, locate the **Machine ID** field.
+4. Click **Copy** to copy the Machine ID to your clipboard.
+5. Send the Machine ID to the developer or your IT contact.
+6. The developer will provide an **Activation Key** in the format `XXXX-XXXX-XXXX`.
+7. Paste the Activation Key into the **Activation Key** field.
+8. Click **Activate**.
+9. The status text changes to **✓ Licensed** immediately — no restart required.
+
+### Important Notes
+
+- Activation keys are tied to the specific computer they were generated for. A key issued for one machine will not work on another machine.
+- If you reinstall Windows or replace the system drive, your Machine ID may change and a new key will be required.
+- Upgrading ARC (install over the top) does not affect your activation — the license is stored in the database file at `%LOCALAPPDATA%\ARC\data\arc_data.db`, which the installer does not touch.
+
+### If Your Trial Has Expired
+
+A blocking dialog appears at startup. You can:
+- Click **Activate License…** to enter your key immediately.
+- Click **Continue in Read-Only Mode** to browse existing records without entering data.
+
 ## Support
 
 If installation fails, send IT or the project owner:

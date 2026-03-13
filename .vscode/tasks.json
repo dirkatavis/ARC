@@ -46,7 +46,7 @@
         "-File",
         "project_arc/tools/build_setup.ps1",
         "-Version",
-        "1.0.0",
+        "1.1.0",
         "-Clean"
       ],
       "options": {
@@ -64,7 +64,7 @@
         "-File",
         "project_arc/tools/build_setup.ps1",
         "-Version",
-        "1.0.0"
+        "1.1.0"
       ],
       "options": {
         "cwd": "${workspaceFolder}"
