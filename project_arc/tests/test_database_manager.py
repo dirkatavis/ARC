@@ -34,3 +34,24 @@ def test_initialize_schema_creates_callouts_employee_index() -> None:
     ).fetchone()
     assert row is not None
     connection.close()
+
+
+def test_upsert_employee_can_defer_commit() -> None:
+    connection = sqlite3.connect(":memory:")
+    db = DatabaseManager(connection)
+    db.initialize_schema()
+
+    db.upsert_employee(2001, "Alex", "Stone", commit=False)
+    row = connection.execute(
+        "SELECT first_name, last_name FROM employees WHERE employee_id = 2001"
+    ).fetchone()
+    assert row is not None
+    assert row["first_name"] == "Alex"
+    assert row["last_name"] == "Stone"
+
+    connection.commit()
+    row_after_commit = connection.execute(
+        "SELECT first_name, last_name FROM employees WHERE employee_id = 2001"
+    ).fetchone()
+    assert row_after_commit is not None
+    connection.close()

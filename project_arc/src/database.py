@@ -50,7 +50,13 @@ class DatabaseManager:
         )
         self.connection.commit()
 
-    def upsert_employee(self, employee_id: int, first_name: str, last_name: str) -> None:
+    def upsert_employee(
+        self,
+        employee_id: int,
+        first_name: str,
+        last_name: str,
+        commit: bool = True,
+    ) -> None:
         """Insert or update an employee by employee_id."""
         self.connection.execute(
             """
@@ -62,7 +68,8 @@ class DatabaseManager:
             """,
             (employee_id, first_name, last_name),
         )
-        self.connection.commit()
+        if commit:
+            self.connection.commit()
 
     def fetch_employee(self, employee_id: int) -> dict[str, Any] | None:
         """Return employee data for a specific employee id."""
